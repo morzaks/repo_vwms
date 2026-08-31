@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Portal - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-slate-800">Manager Portal</h1>
+            <p class="text-slate-500 text-sm mt-1">VWMS Access</p>
+        </div>
+
+        <!-- Form Request OTP -->
+        <form id="emailForm" class="space-y-5">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Email Manager</label>
+                <input type="email" id="Email" required placeholder="email@shipper.id" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <button type="submit" id="requestOtpBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200">
+                Kirim OTP
+            </button>
+        </form>
+
+        <!-- Form Input OTP (Awalnya Sembunyi) -->
+        <form id="otpForm" class="space-y-5 hidden mt-5">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Masukkan 6 Digit OTP</label>
+                <input type="text" id="OTP" required maxlength="6" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-center text-xl tracking-widest">
+            </div>
+            <button type="submit" id="verifyOtpBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition duration-200">
+                Verifikasi & Login
+            </button>
+        </form>
+
+        <div id="statusMessage" class="hidden text-center text-sm font-medium p-3 rounded-lg mt-5"></div>
+    </div>
+
+    <script src="manager.js"></script>
+</body>
+</html>

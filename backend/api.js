@@ -1,16 +1,20 @@
-// Ganti dengan Spreadsheet ID milikmu
 const SPREADSHEET_ID = '11kKHKzOSc4IygRvkmiKrj76Yd4aoacCYRplIeQI4sgU';
 
-// Fungsi utama untuk menerima request POST (Insert/Update Data)
 function doPost(e) {
   try {
     let data = JSON.parse(e.postData.contents);
     let action = data.action;
 
-    // Routing action
-    if (action === "submit_visitor") {
-      return handleVisitorSubmit(data.payload);
-    }
+    if (action === "submit_visitor") return handleVisitorSubmit(data.payload);
+    else if (action === "request_otp") return handleRequestOtp(data.payload);
+    else if (action === "verify_otp") return handleVerifyOtp(data.payload);
+    else if (action === "get_all_requests") return handleGetAllRequests(data.payload); 
+    else if (action === "approve_request") return handleApproveRequest(data.payload);
+    else if (action === "get_warehouses") return handleGetWarehouses();
+    // ROUTING BARU UNTUK SECURITY APP
+    else if (action === "security_login") return handleSecurityLogin(data.payload);
+    else if (action === "scan_qr") return handleScanQR(data.payload);
+    else if (action === "check_in") return handleCheckIn(data.payload);
 
     return createJsonResponse({ status: 'error', message: 'Action not found' });
   } catch (error) {
@@ -18,42 +22,188 @@ function doPost(e) {
   }
 }
 
-// Fungsi khusus untuk memasukkan data Visitor ke Spreadsheet
 function handleVisitorSubmit(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
-
-  // Generate ID unik & Timestamp
   let timestamp = new Date();
   let requestId = "REQ-" + Utilities.formatDate(timestamp, "GMT+7", "yyyyMMddHHmmss");
-
-  // Susunan array ini HARUS sama persis urutannya dengan kolom di Spreadsheet
   let rowData = [
-    requestId,
-    timestamp,
-    payload.Name,
-    payload.Email,
-    payload.ID_Number,
-    payload.Category,
-    payload.Department,
-    payload.Company,
-    payload.Visit_Date,
-    payload.Visit_Purpose,
-    payload.Warehouse_Code,
-    "Pending" // Status awal selalu Pending untuk di-approve Manager
+    requestId, timestamp, payload.Name, payload.Email, payload.ID_Number,
+    payload.Category, payload.Department, payload.Company, payload.Visit_Date,
+    payload.Visit_Purpose, payload.Warehouse_Code, "Pending"
   ];
-
   sheet.appendRow(rowData);
-
-  return createJsonResponse({
-    status: 'success',
-    message: 'Visitor request submitted successfully',
-    data: { request_id: requestId }
-  });
+  return createJsonResponse({ status: 'success', message: 'Visitor request submitted successfully', data: { request_id: requestId } });
 }
 
-// Helper untuk membalas request dengan format JSON
-function createJsonResponse(responseObject) {
-  return ContentService.createTextOutput(JSON.stringify(responseObject))
-    .setMimeType(ContentService.MimeType.JSON);
+function handleRequestOtp(payload) {
+  let email = payload.Email;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let accountSheet = ss.getSheetByName("Master_Account");
+  let data = accountSheet.getDataRange().getValues();
+  let isManager = false;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === email && (data[i][2] === "Manager" || data[i][2] === "Manager_All")) {
+      isManager = true; break;
+    }
+  }
+  if (!isManager) return createJsonResponse({ status: 'error', message: 'Email tidak terdaftar sebagai Manager' });
+  let otp = Math.floor(100000 + Math.random() * 900000).toString();
+  let otpSheet = ss.getSheetByName("Auth_OTP");
+  otpSheet.appendRow([email, otp, new Date(new Date().getTime() + 10 * 60000), "Active"]);
+  GmailApp.sendEmail(email, "[VWMS] OTP Login Manager", "Kode OTP Anda: " + otp);
+  return createJsonResponse({ status: 'success', message: 'OTP terkirim ke email' });
 }
+
+function handleVerifyOtp(payload) {
+  let email = payload.Email;
+  let otpInput = payload.OTP;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let otpSheet = ss.getSheetByName("Auth_OTP");
+  let data = otpSheet.getDataRange().getValues();
+  let valid = false, rowIndex = -1, now = new Date();
+  for (let i = data.length - 1; i > 0; i--) {
+    if (data[i][0] === email && data[i][1].toString() === otpInput.toString() && data[i][3] === "Active") {
+      if (now <= new Date(data[i][2])) { valid = true; rowIndex = i + 1; break; }
+    }
+  }
+  if (valid) {
+    otpSheet.getRange(rowIndex, 4).setValue("Used");
+    return createJsonResponse({ status: 'success', message: 'Login berhasil' });
+  } else return createJsonResponse({ status: 'error', message: 'OTP tidak valid / kedaluwarsa' });
+}
+
+function handleApproveRequest(payload) {
+  let reqId = payload.Request_ID;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName("Visitor_Request");
+  let data = sheet.getDataRange().getValues();
+  let rowIndex = -1, visitorEmail = "", visitorName = "";
+  for(let i=1; i<data.length; i++) {
+    if(data[i][0] === reqId) { rowIndex = i + 1; visitorName = data[i][2]; visitorEmail = data[i][3]; break; }
+  }
+  if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
+  sheet.getRange(rowIndex, 12).setValue("Approved");
+  let qrUrl = "https://quickchart.io/qr?text=" + reqId + "&size=300";
+  let htmlBody = `<div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 10px;"><h2 style="color: #2563eb;">Kunjungan Disetujui!</h2><p>Halo <b>${visitorName}</b>,</p><p>Permintaan kunjungan Anda telah disetujui. Silakan tunjukkan QR Code di bawah ini kepada Security.</p><div style="text-align: center; margin: 20px 0;"><img src="${qrUrl}" alt="QR Code" style="width: 250px; height: 250px; border: 2px solid #000; padding: 10px; border-radius: 10px;"/></div><p style="text-align: center; font-size: 18px; font-weight: bold;">${reqId}</p></div>`;
+  GmailApp.sendEmail(visitorEmail, "[VWMS] Kunjungan Disetujui - " + reqId, "Mode HTML diperlukan.", {htmlBody: htmlBody});
+  return createJsonResponse({ status: 'success', message: 'Approved! Email & Barcode telah dikirim.' });
+}
+
+function handleGetAllRequests(payload) {
+  let email = payload.Manager_Email;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let accData = ss.getSheetByName("Master_Account").getDataRange().getValues();
+  let role = "";
+  for (let i = 1; i < accData.length; i++) { if (accData[i][0] === email) { role = accData[i][2]; break; } }
+  if (!role) return createJsonResponse({ status: 'error', message: 'Akses ditolak' });
+
+  let allowedWH = [];
+  if (role === "Manager") {
+    let whData = ss.getSheetByName("Account_Warehouse").getDataRange().getValues();
+    for (let i = 1; i < whData.length; i++) { if (whData[i][0] === email) allowedWH.push(whData[i][1]); }
+  }
+
+  let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
+  let allData = [];
+  for(let i=1; i<data.length; i++) {
+    let whCode = data[i][10], status = data[i][11];
+    let hasAccess = (role === "Manager_All") || (role === "Manager" && allowedWH.includes(whCode));
+    if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In")) { 
+      allData.push({
+        Request_ID: data[i][0], Name: data[i][2], Company: data[i][7],
+        Raw_Date: new Date(data[i][8]).toISOString(), 
+        Visit_Date: Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy"), 
+        Warehouse_Code: whCode, Status: status
+      });
+    }
+  }
+  return createJsonResponse({ status: 'success', data: allData.reverse() }); 
+}
+
+function handleGetWarehouses() {
+  let data = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Master_Warehouse").getDataRange().getValues();
+  let warehouses = [];
+  for (let i = 1; i < data.length; i++) { if(data[i][0]) warehouses.push({ code: data[i][0], name: data[i][1] }); }
+  return createJsonResponse({ status: 'success', data: warehouses });
+}
+
+// ==========================================
+// FUNGSI SECURITY APP (BARU)
+// ==========================================
+function handleSecurityLogin(payload) {
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let accData = ss.getSheetByName("Master_Account").getDataRange().getValues();
+  let valid = false, username = payload.Username, whCode = "";
+  
+  for(let i=1; i<accData.length; i++) {
+    if(accData[i][0] === username && accData[i][1] === payload.Password && accData[i][2] === "Security") {
+      valid = true; break;
+    }
+  }
+  if(!valid) return createJsonResponse({ status: 'error', message: 'Username atau Password salah!' });
+  
+  let whData = ss.getSheetByName("Account_Warehouse").getDataRange().getValues();
+  for(let i=1; i<whData.length; i++) {
+    if(whData[i][0] === username) { whCode = whData[i][1]; break; }
+  }
+  if(!whCode) return createJsonResponse({ status: 'error', message: 'Security belum di-assign ke Gudang manapun' });
+  
+  return createJsonResponse({ status: 'success', data: { username: username, warehouse_code: whCode } });
+}
+
+function handleScanQR(payload) {
+  let reqId = payload.Request_ID, secWh = payload.Warehouse_Code;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
+  let reqData = null;
+  
+  for(let i=1; i<data.length; i++) {
+    if(data[i][0] === reqId) {
+      reqData = { Request_ID: data[i][0], Name: data[i][2], Company: data[i][7], Visit_Date: data[i][8], Warehouse_Code: data[i][10], Status: data[i][11] };
+      break;
+    }
+  }
+  if(!reqData) return createJsonResponse({ status: 'error', message: 'Barcode tidak valid / Request tidak ditemukan' });
+  
+  // LOGIKA VALIDASI
+  if(reqData.Warehouse_Code !== secWh) return createJsonResponse({ status: 'error', message: `Salah lokasi! Visitor ini untuk gudang ${reqData.Warehouse_Code}` });
+  if(reqData.Status === "Pending") return createJsonResponse({ status: 'error', message: 'Ditolak: Request ini belum di-Approve oleh Manager.' });
+  if(reqData.Status === "Checked-In") return createJsonResponse({ status: 'error', message: 'Ditolak: Visitor ini sudah melakukan Check-In sebelumnya.' });
+  
+  let visitDateStr = Utilities.formatDate(new Date(reqData.Visit_Date), "GMT+7", "yyyy-MM-dd");
+  let todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+  
+  if(visitDateStr !== todayStr) {
+    let tglAsli = Utilities.formatDate(new Date(reqData.Visit_Date), "GMT+7", "dd MMM yyyy");
+    return createJsonResponse({ status: 'error', message: `Ditolak: Jadwal kunjungan salah (Seharusnya: ${tglAsli})` });
+  }
+  
+  reqData.Visit_Date = Utilities.formatDate(new Date(reqData.Visit_Date), "GMT+7", "dd MMM yyyy");
+  return createJsonResponse({ status: 'success', data: reqData });
+}
+
+function handleCheckIn(payload) {
+  let reqId = payload.Request_ID, secUsername = payload.Security_Username, secWh = payload.Warehouse_Code;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName("Visitor_Request");
+  let data = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  
+  for(let i=1; i<data.length; i++) {
+    if(data[i][0] === reqId) { rowIndex = i + 1; break; }
+  }
+  if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
+  
+  // Update status Checked-In
+  sheet.getRange(rowIndex, 12).setValue("Checked-In");
+  
+  // Insert Log
+  let timestamp = new Date();
+  let scanId = "SCAN-" + Utilities.formatDate(timestamp, "GMT+7", "yyyyMMddHHmmss");
+  ss.getSheetByName("Visitor_Scan_Log").appendRow([scanId, reqId, secUsername, secWh, timestamp, "Check-In Success"]);
+  
+  return createJsonResponse({ status: 'success', message: 'Check-In Berhasil disimpan!' });
+}
+
+function createJsonResponse(responseObject) { return ContentService.createTextOutput(JSON.stringify(responseObject)).setMimeType(ContentService.MimeType.JSON); }

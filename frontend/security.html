@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VWMS Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body class="bg-slate-900 min-h-screen text-white font-sans">
+
+    <!-- LOGIN SECTION -->
+    <div id="loginSection" class="flex flex-col items-center justify-center min-h-screen p-4">
+        <div class="w-full max-w-sm bg-slate-800 p-8 rounded-2xl shadow-xl">
+            <h1 class="text-2xl font-bold text-center mb-1 text-blue-400">Security Scanner</h1>
+            <p class="text-slate-400 text-center text-sm mb-6">Login untuk mulai scan</p>
+            
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <input type="text" id="username" required placeholder="Username" class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-white">
+                </div>
+                <div>
+                    <input type="password" id="password" required placeholder="Password" class="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-white">
+                </div>
+                <button type="submit" id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 font-semibold py-3 rounded-lg transition duration-200 mt-4">Login</button>
+            </form>
+            <div id="loginMessage" class="hidden mt-4 text-center text-sm font-medium p-3 rounded-lg bg-red-900 text-red-200"></div>
+        </div>
+    </div>
+
+    <!-- SCANNER SECTION -->
+    <div id="scannerSection" class="hidden flex-col min-h-screen">
+        <div class="bg-slate-800 p-4 flex justify-between items-center shadow-lg">
+            <div>
+                <p class="text-xs text-slate-400">Petugas:</p>
+                <p class="font-bold text-sm" id="secInfo"></p>
+            </div>
+            <button onclick="logout()" class="text-xs bg-red-600 px-3 py-1.5 rounded hover:bg-red-700 font-bold">Logout</button>
+        </div>
+
+        <div class="flex-1 flex flex-col p-4 items-center w-full max-w-md mx-auto">
+            <!-- Kamera Scanner -->
+            <div id="reader" class="w-full bg-black rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl mb-4"></div>
+            
+            <button id="rescanBtn" onclick="resumeScanner()" class="hidden bg-slate-700 text-white w-full py-3 rounded-lg font-bold mb-4 shadow">📸 Scan QR Lain</button>
+
+            <!-- Card Hasil Validasi -->
+            <div id="resultCard" class="hidden w-full bg-slate-800 rounded-xl p-5 shadow-lg border-l-4 border-blue-500">
+                <h3 id="resStatus" class="font-bold text-lg mb-2"></h3>
+                <p id="resMsg" class="text-sm text-slate-300 mb-4"></p>
+                
+                <div id="visitorDetails" class="hidden space-y-2 text-sm bg-slate-700 p-3 rounded mb-4">
+                    <p><span class="text-slate-400">ID:</span> <span id="vId" class="font-bold"></span></p>
+                    <p><span class="text-slate-400">Nama:</span> <span id="vName" class="font-bold"></span></p>
+                    <p><span class="text-slate-400">PT:</span> <span id="vCompany"></span></p>
+                </div>
+
+                <button id="checkInBtn" class="hidden w-full bg-green-600 py-3 rounded-lg font-bold hover:bg-green-700 transition">✅ CHECK IN VISITOR</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="security.js"></script>
+</body>
+</html>
