@@ -107,13 +107,20 @@ function renderTable(data) {
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition";
             
-            let statusBadge = req.Status === 'Approved' 
-                ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Approved</span>'
-                : '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Pending</span>';
+            let statusBadge = '';
+            let actionBtn = '';
 
-            let actionBtn = req.Status === 'Pending'
-                ? `<button onclick="approveRequest('${req.Request_ID}', this)" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-4 rounded shadow transition">Approve</button>`
-                : `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed">Done</button>`;
+            // Penentuan Badge dan Tombol berdasarkan Status
+            if (req.Status === 'Approved') {
+                statusBadge = '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Approved</span>';
+                actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed">Done</button>`;
+            } else if (req.Status === 'Checked-In') {
+                statusBadge = '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">Checked-In</span>';
+                actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed">Di Lokasi</button>`;
+            } else { // Jika Pending
+                statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Pending</span>';
+                actionBtn = `<button onclick="approveRequest('${req.Request_ID}', this)" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-4 rounded shadow transition">Approve</button>`;
+            }
 
             tr.innerHTML = `
                 <td class="p-4 text-sm font-medium text-slate-700">${req.Request_ID}</td>

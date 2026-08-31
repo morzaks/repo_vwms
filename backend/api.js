@@ -15,6 +15,7 @@ function doPost(e) {
     else if (action === "security_login") return handleSecurityLogin(data.payload);
     else if (action === "scan_qr") return handleScanQR(data.payload);
     else if (action === "check_in") return handleCheckIn(data.payload);
+    else if (action === "get_expected_visitors") return handleGetExpectedVisitors(data.payload);
 
     return createJsonResponse({ status: 'error', message: 'Action not found' });
   } catch (error) {
@@ -160,7 +161,8 @@ function handleScanQR(payload) {
   
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) {
-      reqData = { Request_ID: data[i][0], Name: data[i][2], Company: data[i][7], Visit_Date: data[i][8], Warehouse_Code: data[i][10], Status: data[i][11] };
+      // Menambahkan ID_Number: data[i][4] ke dalam reqData
+      reqData = { Request_ID: data[i][0], Name: data[i][2], ID_Number: data[i][4], Company: data[i][7], Visit_Date: data[i][8], Warehouse_Code: data[i][10], Status: data[i][11] };
       break;
     }
   }
@@ -207,3 +209,30 @@ function handleCheckIn(payload) {
 }
 
 function createJsonResponse(responseObject) { return ContentService.createTextOutput(JSON.stringify(responseObject)).setMimeType(ContentService.MimeType.JSON); }
+
+// --- FUNGSI BARU: DAFTAR TAMU HARI INI UNTUK SECURITY ---
+function handleGetExpectedVisitors(payload) {
+  let secWh = payload.Warehouse_Code;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
+  
+  // Format hari ini untuk dicocokkan
+  let todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+  let expectedList = [];
+
+  for(let i=1; i<data.length; i++) {
+    let reqWh = data[i][10];
+    let status = data[i][11];
+    let visitDateStr = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "yyyy-MM-dd");
+
+    // Jika Gudang cocok, Status Approved, dan Tanggal Kunjungan adalah Hari Ini
+    if(reqWh === secWh && status === "Approved" && visitDateStr === todayStr) {
+      expectedList.push({
+        Request_ID: data[i][0],
+        Name: data[i][2],
+        Company: data[i][7]
+      });
+    }
+  }
+  return createJsonResponse({ status: 'success', data: expectedList });
+}

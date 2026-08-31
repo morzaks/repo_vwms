@@ -39,6 +39,12 @@
         </div>
 
         <div class="flex-1 flex flex-col p-4 items-center w-full max-w-md mx-auto">
+            
+            <!-- Tombol Expected Visitors (BARU) -->
+            <button onclick="openExpectedModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-blue-400 py-3 rounded-lg font-bold mb-4 shadow border border-slate-600 transition">
+                📋 Daftar Tamu Hari Ini
+            </button>
+
             <!-- Kamera Scanner -->
             <div id="reader" class="w-full bg-black rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl mb-4"></div>
             
@@ -50,12 +56,27 @@
                 <p id="resMsg" class="text-sm text-slate-300 mb-4"></p>
                 
                 <div id="visitorDetails" class="hidden space-y-2 text-sm bg-slate-700 p-3 rounded mb-4">
-                    <p><span class="text-slate-400">ID:</span> <span id="vId" class="font-bold"></span></p>
+                    <p><span class="text-slate-400">ID Req:</span> <span id="vId" class="font-bold"></span></p>
                     <p><span class="text-slate-400">Nama:</span> <span id="vName" class="font-bold"></span></p>
+                    <p><span class="text-slate-400">KTP/SIM:</span> <span id="vKtp" class="font-bold text-yellow-400"></span></p>
                     <p><span class="text-slate-400">PT:</span> <span id="vCompany"></span></p>
                 </div>
 
                 <button id="checkInBtn" class="hidden w-full bg-green-600 py-3 rounded-lg font-bold hover:bg-green-700 transition">✅ CHECK IN VISITOR</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EXPECTED VISITORS (BARU) -->
+    <div id="expectedModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-800 rounded-xl w-full max-w-md p-5 flex flex-col max-h-[80vh] border border-slate-700 shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
+                <h3 class="font-bold text-lg text-white">📋 Tamu Hari Ini</h3>
+                <button onclick="closeExpectedModal()" class="text-slate-400 hover:text-white font-bold text-3xl leading-none">&times;</button>
+            </div>
+            <div id="expectedList" class="overflow-y-auto flex-1 space-y-3 pr-1">
+                <!-- List tamu akan di-generate oleh JS di sini -->
+                <p class="text-center text-slate-400 text-sm mt-4">Memuat data...</p>
             </div>
         </div>
     </div>

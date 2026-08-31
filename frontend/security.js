@@ -97,6 +97,7 @@ async function onScanSuccess(decodedText) {
             document.getElementById('visitorDetails').classList.remove('hidden');
             document.getElementById('vId').innerText = result.data.Request_ID;
             document.getElementById('vName').innerText = result.data.Name;
+            document.getElementById('vKtp').innerText = result.data.ID_Number;
             document.getElementById('vCompany').innerText = result.data.Company;
 
             currentScannedRequest = result.data.Request_ID;
@@ -149,4 +150,66 @@ function logout() {
     localStorage.clear();
     if(html5QrCode) html5QrCode.stop();
     window.location.reload();
+}
+
+// ==========================================
+// FUNGSI MODAL EXPECTED VISITORS (TAMU HARI INI)
+// ==========================================
+function openExpectedModal() {
+    document.getElementById('expectedModal').classList.remove('hidden');
+    fetchExpectedVisitors();
+    if(html5QrCode) html5QrCode.pause(); // Pause kamera saat modal terbuka biar hemat baterai
+}
+
+function closeExpectedModal() {
+    document.getElementById('expectedModal').classList.add('hidden');
+    if(html5QrCode) html5QrCode.resume(); // Lanjutkan kamera saat modal ditutup
+}
+
+async function fetchExpectedVisitors() {
+    const listContainer = document.getElementById('expectedList');
+    listContainer.innerHTML = '<p class="text-center text-slate-400 text-sm mt-4">Sedang memuat data dari server...</p>';
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'get_expected_visitors',
+                payload: { Warehouse_Code: localStorage.getItem('sec_wh') }
+            })
+        });
+        const result = await res.json();
+
+        if(result.status === 'success') {
+            listContainer.innerHTML = ''; // Kosongkan
+            
+            if(result.data.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center p-6 bg-slate-700 rounded-lg">
+                        <span class="text-4xl mb-2 block">📭</span>
+                        <p class="text-slate-300 text-sm font-medium">Tidak ada tamu yang dijadwalkan hari ini.</p>
+                    </div>`;
+                return;
+            }
+
+            // Looping data tamu
+            result.data.forEach(visitor => {
+                const div = document.createElement('div');
+                div.className = "bg-slate-700 p-3 rounded-lg border-l-4 border-blue-500 shadow-md";
+                div.innerHTML = `
+                    <div class="flex justify-between items-start mb-1">
+                        <p class="font-bold text-white text-base">${visitor.Name}</p>
+                        <span class="bg-blue-900 text-blue-300 text-[10px] px-2 py-0.5 rounded font-bold uppercase">Approved</span>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-1">PT. ${visitor.Company}</p>
+                    <p class="text-xs text-slate-400 font-mono">${visitor.Request_ID}</p>
+                `;
+                listContainer.appendChild(div);
+            });
+        } else {
+            listContainer.innerHTML = `<p class="text-center text-red-400 text-sm mt-4">${result.message}</p>`;
+        }
+    } catch(err) {
+        listContainer.innerHTML = '<p class="text-center text-red-400 text-sm mt-4">Gagal terhubung ke jaringan.</p>';
+    }
 }
