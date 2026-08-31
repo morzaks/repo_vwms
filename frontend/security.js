@@ -158,12 +158,23 @@ function logout() {
 function openExpectedModal() {
     document.getElementById('expectedModal').classList.remove('hidden');
     fetchExpectedVisitors();
-    if(html5QrCode) html5QrCode.pause(); // Pause kamera saat modal terbuka biar hemat baterai
+    
+    // Dibungkus try-catch agar kalau kamera HP tidak support 'pause', kode tetap jalan
+    try {
+        if(html5QrCode) html5QrCode.pause(); 
+    } catch(err) {
+        console.log("Kamera tidak mendukung pause.");
+    }
 }
 
 function closeExpectedModal() {
     document.getElementById('expectedModal').classList.add('hidden');
-    if(html5QrCode) html5QrCode.resume(); // Lanjutkan kamera saat modal ditutup
+    
+    try {
+        if(html5QrCode) html5QrCode.resume(); 
+    } catch(err) {
+        console.log("Kamera tidak mendukung resume.");
+    }
 }
 
 async function fetchExpectedVisitors() {
