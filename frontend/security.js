@@ -63,8 +63,9 @@ function startScanner() {
     
     html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
-        { facingMode: "environment" }, // Kamera belakang
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { facingMode: "environment" }, 
+        // UBAH FPS MENJADI 3 DI SINI AGAR HP TIDAK CEPAT PANAS/LEMOT
+        { fps: 3, qrbox: { width: 250, height: 250 } },
         onScanSuccess
     ).catch(err => alert("Kamera diblokir/tidak ditemukan."));
 }
