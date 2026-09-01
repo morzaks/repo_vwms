@@ -225,3 +225,70 @@ async function fetchExpectedVisitors() {
         listContainer.innerHTML = '<p class="text-center text-red-400 text-sm mt-4">Gagal terhubung ke jaringan.</p>';
     }
 }
+
+// ==========================================
+// FUNGSI AUTH (TOGGLE & REGISTER)
+// ==========================================
+function toggleAuth(type) {
+    const loginBlock = document.getElementById('loginBlock');
+    const registerBlock = document.getElementById('registerBlock');
+    
+    // Reset pesan
+    document.getElementById('loginMessage').classList.add('hidden');
+    document.getElementById('registerMessage').classList.add('hidden');
+    document.getElementById('registerForm').reset();
+    
+    if (type === 'register') {
+        loginBlock.classList.add('hidden');
+        registerBlock.classList.remove('hidden');
+    } else {
+        registerBlock.classList.add('hidden');
+        loginBlock.classList.remove('hidden');
+    }
+}
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('registerBtn');
+    const msg = document.getElementById('registerMessage');
+    
+    const user = document.getElementById('regUsername').value;
+    const pass = document.getElementById('regPassword').value;
+    const pass2 = document.getElementById('regConfirmPassword').value;
+
+    // Validasi ketikan password
+    if (pass !== pass2) {
+        msg.textContent = "Password tidak cocok! Silakan cek kembali.";
+        msg.className = "mt-4 text-center text-sm font-medium p-3 rounded-lg bg-red-900 text-red-200 block";
+        return;
+    }
+
+    btn.innerText = "Memproses...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: 'security_register', 
+                payload: { Username: user, Password: pass } 
+            })
+        });
+        const result = await res.json();
+
+        if (result.status === 'success') {
+            msg.textContent = result.message;
+            msg.className = "mt-4 text-center text-sm font-medium p-3 rounded-lg bg-green-900 text-green-200 block";
+            document.getElementById('registerForm').reset();
+        } else {
+            msg.textContent = result.message;
+            msg.className = "mt-4 text-center text-sm font-medium p-3 rounded-lg bg-red-900 text-red-200 block";
+        }
+    } catch(err) {
+        msg.textContent = "Gagal koneksi server. Coba lagi.";
+        msg.className = "mt-4 text-center text-sm font-medium p-3 rounded-lg bg-red-900 text-red-200 block";
+    } finally {
+        btn.innerText = "Daftar Akun";
+        btn.disabled = false;
+    }
+});

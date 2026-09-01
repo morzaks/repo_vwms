@@ -13,6 +13,7 @@ function doPost(e) {
     else if (action === "get_warehouses") return handleGetWarehouses();
     // ROUTING BARU UNTUK SECURITY APP
     else if (action === "security_login") return handleSecurityLogin(data.payload);
+    else if (action === "security_register") return handleSecurityRegister(data.payload);
     else if (action === "scan_qr") return handleScanQR(data.payload);
     else if (action === "check_in") return handleCheckIn(data.payload);
     else if (action === "get_expected_visitors") return handleGetExpectedVisitors(data.payload);
@@ -148,7 +149,7 @@ function handleSecurityLogin(payload) {
   for(let i=1; i<whData.length; i++) {
     if(whData[i][0] === username) { whCode = whData[i][1]; break; }
   }
-  if(!whCode) return createJsonResponse({ status: 'error', message: 'Security belum di-assign ke Gudang manapun' });
+  if(!whCode) return createJsonResponse({ status: 'error', message: 'Akun belum bisa digunakan karena akun belum di-assign ke warehouse tujuan, harap hubungi admin.' });
   
   return createJsonResponse({ status: 'success', data: { username: username, warehouse_code: whCode } });
 }
@@ -235,4 +236,53 @@ function handleGetExpectedVisitors(payload) {
     }
   }
   return createJsonResponse({ status: 'success', data: expectedList });
+}
+
+// ==========================================
+// FUNGSI CRON JOB: AUTO-REJECT EXPIRED REQUESTS
+// ==========================================
+function autoRejectExpiredRequests() {
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName("Visitor_Request");
+  let data = sheet.getDataRange().getValues();
+  
+  // Set waktu hari ini ke jam 00:00:00 untuk perbandingan yang akurat
+  let today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Looping mulai dari baris 2 (index 1)
+  for (let i = 1; i < data.length; i++) {
+    let status = data[i][11];
+    let visitDate = new Date(data[i][8]);
+    visitDate.setHours(0, 0, 0, 0);
+
+    // Jika status masih Pending DAN tanggal kunjungannya sudah terlewat
+    if (status === "Pending" && visitDate < today) {
+      // Ubah status di Spreadsheet menjadi Rejected (Auto)
+      sheet.getRange(i + 1, 12).setValue("Rejected (Auto)");
+    }
+  }
+}
+
+// ==========================================
+// FUNGSI REGISTER SECURITY (BARU)
+// ==========================================
+function handleSecurityRegister(payload) {
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let accSheet = ss.getSheetByName("Master_Account");
+  let data = accSheet.getDataRange().getValues();
+  let username = payload.Username;
+  
+  // 1. Cek apakah username sudah dipakai
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === username) {
+      return createJsonResponse({ status: 'error', message: 'Username sudah terdaftar. Silakan gunakan username lain.' });
+    }
+  }
+  
+  // 2. Simpan ke sheet Master_Account dengan Role "Security"
+  accSheet.appendRow([username, payload.Password, "Security"]);
+  
+  // Catatan: Kita TIDAK menyimpan ke Account_Warehouse di sini, agar Admin yang menentukan.
+  return createJsonResponse({ status: 'success', message: 'Registrasi berhasil! Silakan hubungi Admin untuk assign gudang sebelum login.' });
 }

@@ -5,6 +5,7 @@ if(!managerEmail) window.location.href = 'manager.html';
 document.getElementById('userEmailDisplay').textContent = managerEmail;
 
 let globalData = []; // Menyimpan semua data dari API agar tidak perlu loading berulang
+let currentFilteredData = []; // VARIABEL BARU UNTUK MENYIMPAN DATA YANG AKAN DI-EXPORT
 
 // FUNGSI LOAD DATA DARI API (Sekali panggil)
 async function fetchRequestsData() {
@@ -41,6 +42,8 @@ function applyFilter() {
         end.setHours(23, 59, 59, 999);
         filteredData = filteredData.filter(req => new Date(req.Raw_Date) <= end);
     }
+
+    currentFilteredData = filteredData; // SIMPAN DATA KE VARIABEL BARU INI
 
     renderSummaryCards(filteredData);
     renderTable(filteredData);
@@ -172,3 +175,40 @@ function logout() {
 
 // Inisialisasi awal
 fetchRequestsData();
+
+// ==========================================
+// FUNGSI EXPORT KE CSV
+// ==========================================
+function exportToCSV() {
+    if (currentFilteredData.length === 0) {
+        alert("Tidak ada data untuk di-export!");
+        return;
+    }
+
+    // 1. Buat Header CSV
+    let csvContent = "Request_ID,Nama,Perusahaan,Jadwal_Kunjungan,Gudang,Status\n";
+
+    // 2. Masukkan isi data (Looping)
+    currentFilteredData.forEach(req => {
+        // Tanda kutip ditambahkan untuk mencegah error jika ada koma di nama perusahaan
+        let name = `"${req.Name}"`;
+        let company = `"${req.Company}"`;
+        
+        csvContent += `${req.Request_ID},${name},${company},${req.Visit_Date},${req.Warehouse_Code},${req.Status}\n`;
+    });
+
+    // 3. Buat File Virtual (Blob) dan Trigger Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    
+    // Nama file otomatis menggunakan tanggal hari ini
+    const todayDate = new Date().toISOString().slice(0,10);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Report_VWMS_${todayDate}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
