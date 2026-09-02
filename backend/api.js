@@ -10,6 +10,7 @@ function doPost(e) {
     else if (action === "verify_otp") return handleVerifyOtp(data.payload);
     else if (action === "get_all_requests") return handleGetAllRequests(data.payload); 
     else if (action === "approve_request") return handleApproveRequest(data.payload);
+    else if (action === "reject_request") return handleRejectRequest(data.payload);
     else if (action === "get_warehouses") return handleGetWarehouses();
     // ROUTING BARU UNTUK SECURITY APP
     else if (action === "security_login") return handleSecurityLogin(data.payload);
@@ -80,15 +81,39 @@ function handleApproveRequest(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
   let data = sheet.getDataRange().getValues();
-  let rowIndex = -1, visitorEmail = "", visitorName = "";
+  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", visitDate = "";
+  
   for(let i=1; i<data.length; i++) {
-    if(data[i][0] === reqId) { rowIndex = i + 1; visitorName = data[i][2]; visitorEmail = data[i][3]; break; }
+    if(data[i][0] === reqId) { 
+        rowIndex = i + 1; visitorName = data[i][2]; visitorEmail = data[i][3]; 
+        whCode = data[i][10]; visitDate = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
+        break; 
+    }
   }
   if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
+  
   sheet.getRange(rowIndex, 12).setValue("Approved");
   let qrUrl = "https://quickchart.io/qr?text=" + reqId + "&size=300";
-  let htmlBody = `<div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 10px;"><h2 style="color: #2563eb;">Kunjungan Disetujui!</h2><p>Halo <b>${visitorName}</b>,</p><p>Permintaan kunjungan Anda telah disetujui. Silakan tunjukkan QR Code di bawah ini kepada Security.</p><div style="text-align: center; margin: 20px 0;"><img src="${qrUrl}" alt="QR Code" style="width: 250px; height: 250px; border: 2px solid #000; padding: 10px; border-radius: 10px;"/></div><p style="text-align: center; font-size: 18px; font-weight: bold;">${reqId}</p></div>`;
-  GmailApp.sendEmail(visitorEmail, "[VWMS] Kunjungan Disetujui - " + reqId, "Mode HTML diperlukan.", {htmlBody: htmlBody});
+  
+  let htmlBody = `
+    <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+        <h2 style="color: #000;">Halo Selamat Datang di Warehouse Shipper</h2>
+        <p><b>Warehouse Code:</b> ${whCode}</p>
+        <p>Hai <b>${visitorName}</b>,</p>
+        <p>Demi menjaga kenyamanan dan keamanan semua pihak, untuk memasuki area <b>Warehouse Shipper (${whCode})</b>, setiap visitor diwajibkan menunjukkan barcode visitor sebagai tanda pengenal.</p>
+        <p style="font-style: italic; color: #555;">To ensure safety and convenience for all parties, all visitors entering the <b>Shipper Warehouse (${whCode})</b> are required to present a visitor barcode as an identification pass.</p>
+        <p><b>QR Code berikut dapat dipindai oleh petugas Security sebagai bukti akses masuk ke area warehouse.</b></p>
+        <p><b>Masa berlaku barcode:</b> ${visitDate}</p>
+        <div style="margin: 20px 0;">
+            <a href="${qrUrl}" download="Barcode_${reqId}.png">
+                <img src="${qrUrl}" alt="QR Code" style="width: 250px; height: 250px; border: 1px solid #ddd;"/>
+            </a>
+        </div>
+        <p style="font-size: 12px; font-style: italic;">*Barcode hanya berlaku pada tanggal yang tertera.</p>
+        <p>Terima kasih atas kepercayaan dan dukungan Anda.<br>Kami menantikan kunjungan Anda!</p>
+    </div>`;
+  
+  GmailApp.sendEmail(visitorEmail, "Barcode Visitor Warehouse Shipper - " + reqId, "Mode HTML diperlukan.", {htmlBody: htmlBody});
   return createJsonResponse({ status: 'success', message: 'Approved! Email & Barcode telah dikirim.' });
 }
 
@@ -111,7 +136,9 @@ function handleGetAllRequests(payload) {
   for(let i=1; i<data.length; i++) {
     let whCode = data[i][10], status = data[i][11];
     let hasAccess = (role === "Manager_All") || (role === "Manager" && allowedWH.includes(whCode));
-    if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In")) { 
+    
+    // TAMBAHAN: Memasukkan status Rejected agar tidak hilang dari dashboard
+    if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In" || status === "Rejected" || status === "Rejected (Auto)")) { 
       allData.push({
         Request_ID: data[i][0], Name: data[i][2], Company: data[i][7],
         Raw_Date: new Date(data[i][8]).toISOString(), 
@@ -121,6 +148,21 @@ function handleGetAllRequests(payload) {
     }
   }
   return createJsonResponse({ status: 'success', data: allData.reverse() }); 
+}
+
+function handleRejectRequest(payload) {
+  let reqId = payload.Request_ID;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName("Visitor_Request");
+  let data = sheet.getDataRange().getValues();
+  
+  for(let i=1; i<data.length; i++) {
+    if(data[i][0] === reqId) { 
+      sheet.getRange(i + 1, 12).setValue("Rejected");
+      return createJsonResponse({ status: 'success', message: 'Request ditolak' });
+    }
+  }
+  return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
 }
 
 function handleGetWarehouses() {
@@ -163,7 +205,11 @@ function handleScanQR(payload) {
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) {
       // Menambahkan ID_Number: data[i][4] ke dalam reqData
-      reqData = { Request_ID: data[i][0], Name: data[i][2], ID_Number: data[i][4], Company: data[i][7], Visit_Date: data[i][8], Warehouse_Code: data[i][10], Status: data[i][11] };
+        reqData = { 
+            Request_ID: data[i][0], Name: data[i][2], ID_Number: data[i][4], 
+            Company: data[i][7], Visit_Date: data[i][8], Visit_Purpose: data[i][9], // INI TAMBAHANNYA
+            Warehouse_Code: data[i][10], Status: data[i][11] 
+        };
       break;
     }
   }

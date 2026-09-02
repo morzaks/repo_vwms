@@ -6,7 +6,6 @@ const deptContainer = document.getElementById('deptContainer');
 const departmentInput = document.getElementById('Department');
 const companyInput = document.getElementById('Company');
 const submitBtn = document.getElementById('submitBtn');
-const statusMessage = document.getElementById('statusMessage');
 
 let whSelectInstance; // Menyimpan instance dropdown searchable
 
@@ -56,14 +55,17 @@ form.addEventListener('submit', async function(e) {
             body: JSON.stringify(requestBody)
         });
 
-        showMessage('Berhasil! Request visitor Anda sedang diproses.', 'success');
+        // Munculkan Modal Sukses
+        document.getElementById('successModal').classList.remove('hidden');
+        
+        // Reset form
         form.reset();
         categorySelect.dispatchEvent(new Event('change')); 
         if (whSelectInstance) whSelectInstance.clear(); // Bersihkan dropdown pencarian
         
     } catch (error) {
         console.error('Error:', error);
-        showMessage('Terjadi kesalahan jaringan. Silakan coba lagi.', 'error');
+        alert('Terjadi kesalahan jaringan. Silakan coba lagi.');
     } finally {
         submitBtn.innerHTML = 'Submit Request';
         submitBtn.disabled = false;
@@ -71,14 +73,9 @@ form.addEventListener('submit', async function(e) {
     }
 });
 
-function showMessage(text, type) {
-    statusMessage.textContent = text;
-    statusMessage.classList.remove('hidden', 'bg-green-100', 'text-green-700', 'bg-red-100', 'text-red-700');
-    if (type === 'success') {
-        statusMessage.classList.add('bg-green-100', 'text-green-700');
-    } else {
-        statusMessage.classList.add('bg-red-100', 'text-red-700');
-    }
+// Fungsi untuk menutup modal
+function closeModal() {
+    document.getElementById('successModal').classList.add('hidden');
 }
 
 async function loadWarehouses() {

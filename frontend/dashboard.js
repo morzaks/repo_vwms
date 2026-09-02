@@ -55,52 +55,51 @@ function resetFilter() {
     applyFilter();
 }
 
-// FUNGSI RENDER SUMMARY CARDS
+// FUNGSI RENDER SUMMARY CARDS (Menambahkan baris "Ditolak")
 function renderSummaryCards(data) {
-    const container = document.getElementById('summaryCards');
-    container.innerHTML = ''; // Kosongkan
+    const summaryCards = document.getElementById('summaryCards');
+    summaryCards.innerHTML = ''; // Bersihkan container
+    
+    let whGroups = {};
 
-    // Hitung akumulasi per gudang
-    let summary = {};
     data.forEach(req => {
-        let wh = req.Warehouse_Code;
-        if (!summary[wh]) summary[wh] = { total: 0, pending: 0, approved: 0 };
-        
-        summary[wh].total++;
-        if (req.Status === 'Pending') summary[wh].pending++;
-        if (req.Status === 'Approved') summary[wh].approved++;
+        if (!whGroups[req.Warehouse_Code]) {
+            whGroups[req.Warehouse_Code] = { total: 0, pending: 0, approved: 0, rejected: 0 };
+        }
+        whGroups[req.Warehouse_Code].total++;
+        if (req.Status === 'Pending') whGroups[req.Warehouse_Code].pending++;
+        if (req.Status === 'Approved' || req.Status === 'Checked-In') whGroups[req.Warehouse_Code].approved++;
+        if (req.Status === 'Rejected' || req.Status === 'Rejected (Auto)') whGroups[req.Warehouse_Code].rejected++;
     });
 
-    if (Object.keys(summary).length === 0) {
-        container.innerHTML = `<div class="bg-white p-6 rounded-lg shadow text-center text-slate-500 col-span-full">Tidak ada data kunjungan pada periode ini.</div>`;
-        return;
-    }
-
-    // Buat HTML Card
-    for (let wh in summary) {
-        let s = summary[wh];
-        let card = document.createElement('div');
-        card.className = "bg-white p-6 rounded-lg shadow-md border-t-4 border-blue-600";
-        card.innerHTML = `
-            <h3 class="text-xl font-bold text-slate-800 mb-4">${wh}</h3>
-            <div class="flex justify-between items-center mb-2 border-b pb-2">
-                <span class="text-sm font-medium text-slate-500">Total Request</span>
-                <span class="text-lg font-bold text-blue-600">${s.total}</span>
-            </div>
-            <div class="flex justify-between items-center mb-2 border-b pb-2">
-                <span class="text-sm font-medium text-yellow-600">Menunggu Approval</span>
-                <span class="font-bold text-yellow-600">${s.pending}</span>
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-sm font-medium text-green-600">Disetujui</span>
-                <span class="font-bold text-green-600">${s.approved}</span>
+    for (const [wh, counts] of Object.entries(whGroups)) {
+        summaryCards.innerHTML += `
+            <div class="bg-white rounded-xl shadow p-6 border-t-4 border-blue-600 w-80 flex-shrink-0">
+                <h3 class="font-bold text-xl text-slate-800 mb-4">${wh}</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="text-slate-500 text-sm">Total Request</span>
+                        <span class="font-bold text-blue-600">${counts.total}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="text-slate-500 text-sm">Menunggu Approval</span>
+                        <span class="font-bold text-yellow-600">${counts.pending}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="text-slate-500 text-sm">Disetujui / Di Lokasi</span>
+                        <span class="font-bold text-green-600">${counts.approved}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500 text-sm">Ditolak</span>
+                        <span class="font-bold text-red-600">${counts.rejected}</span>
+                    </div>
+                </div>
             </div>
         `;
-        container.appendChild(card);
     }
 }
 
-// FUNGSI RENDER TABEL (Menyesuaikan data yg di-filter)
+// FUNGSI RENDER TABEL (Menambahkan kondisi Rejected)
 function renderTable(data) {
     const tableBody = document.getElementById('tableBody');
     tableBody.innerHTML = ''; 
@@ -113,16 +112,22 @@ function renderTable(data) {
             let statusBadge = '';
             let actionBtn = '';
 
-            // Penentuan Badge dan Tombol berdasarkan Status
             if (req.Status === 'Approved') {
                 statusBadge = '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Approved</span>';
                 actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed">Done</button>`;
             } else if (req.Status === 'Checked-In') {
                 statusBadge = '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">Checked-In</span>';
                 actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed">Di Lokasi</button>`;
+            } else if (req.Status === 'Rejected' || req.Status === 'Rejected (Auto)') {
+                statusBadge = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Rejected</span>';
+                actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-3 rounded cursor-not-allowed">Ditolak</button>`;
             } else { // Jika Pending
                 statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Pending</span>';
-                actionBtn = `<button onclick="approveRequest('${req.Request_ID}', this)" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-4 rounded shadow transition">Approve</button>`;
+                actionBtn = `
+                    <div class="flex gap-2 justify-center">
+                        <button onclick="approveRequest('${req.Request_ID}', this)" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition">Approve</button>
+                        <button onclick="rejectRequest('${req.Request_ID}', this)" class="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition">Reject</button>
+                    </div>`;
             }
 
             tr.innerHTML = `
@@ -165,6 +170,27 @@ async function approveRequest(reqId, btnElement) {
     } catch(error) {
         alert("Terjadi kesalahan jaringan.");
         fetchRequestsData(); // Reset UI
+    }
+}
+
+// Di akhir blok try dalam approveRequest, tambahkan:
+// fetchDashboardData(); 
+
+async function rejectRequest(reqId, btnElement) {
+    if(!confirm('Yakin ingin me-reject request ini?')) return;
+    btnElement.innerText = "Processing...";
+    btnElement.disabled = true;
+
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'reject_request', payload: { Request_ID: reqId } })
+        });
+        fetchDashboardData(); // AUTO REFRESH
+    } catch(err) {
+        alert("Gagal koneksi ke server");
+        btnElement.innerText = "Reject";
+        btnElement.disabled = false;
     }
 }
 
