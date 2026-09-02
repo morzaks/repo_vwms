@@ -182,13 +182,21 @@ async function rejectRequest(reqId, btnElement) {
     btnElement.disabled = true;
 
     try {
-        await fetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'reject_request', payload: { Request_ID: reqId } })
         });
-        fetchDashboardData(); // AUTO REFRESH
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            fetchDashboardData(); // Tarik data terbaru untuk refresh tabel
+        } else {
+            alert('Gagal: ' + result.message);
+            btnElement.innerText = "Reject";
+            btnElement.disabled = false;
+        }
     } catch(err) {
-        alert("Gagal koneksi ke server");
+        alert("Gagal koneksi ke server. Pastikan kamu mengakses via link GitHub Pages.");
         btnElement.innerText = "Reject";
         btnElement.disabled = false;
     }
@@ -237,4 +245,33 @@ function exportToCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// ==========================================
+// AUTO REFRESH (LIVE TIME DASHBOARD)
+// ==========================================
+// Menarik data terbaru secara diam-diam setiap 15 detik (15000 ms)
+setInterval(() => {
+    fetchDashboardDataInBackground();
+}, 15000);
+
+async function fetchDashboardDataInBackground() {
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: 'get_all_requests', 
+                payload: { Manager_Email: localStorage.getItem('manager_email') } 
+            })
+        });
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            globalData = result.data;
+            applyFilter(); // Render ulang tabel & summary (tidak merusak filter jika sedang aktif)
+        }
+    } catch(err) {
+        // Jika internet tiba-tiba putus, biarkan saja agar tidak mengganggu user (silent error)
+        console.log("Auto-refresh tertunda karena jaringan...");
+    }
 }
