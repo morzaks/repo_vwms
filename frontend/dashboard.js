@@ -148,54 +148,58 @@ function renderTable(data) {
     }
 }
 
+// ==========================================
+// FUNGSI APPROVE INSTAN (OPTIMISTIC UI)
+// ==========================================
 async function approveRequest(reqId, btnElement) {
-    if(!confirm(`Yakin ingin menyetujui request ${reqId}?`)) return;
+    if(!confirm('Yakin ingin menyetujui request ini? Email barcode akan dikirim.')) return;
     btnElement.innerText = "Processing...";
     btnElement.disabled = true;
-    
+
+    // 1. Ubah tampilan layar secara INSTAN (tanpa nunggu server)
+    let reqIndex = globalData.findIndex(r => r.Request_ID === reqId);
+    if(reqIndex !== -1) {
+        globalData[reqIndex].Status = 'Approved';
+        applyFilter(); // Render ulang tabel dan summary detik itu juga!
+    }
+
+    // 2. Suruh server bekerja diam-diam di background (Fire and forget)
     try {
-        const response = await fetch(API_URL, {
+        fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'approve_request', payload: { Request_ID: reqId, Manager_Email: managerEmail } })
+            body: JSON.stringify({ 
+                action: 'approve_request', 
+                payload: { Request_ID: reqId, Manager_Email: localStorage.getItem('manager_email') } 
+            })
         });
-        const result = await response.json();
-        
-        if(result.status === 'success') {
-            alert(result.message);
-            fetchRequestsData(); // Ambil ulang data segar dari server setelah approve
-        } else {
-            alert("Gagal: " + result.message);
-            fetchRequestsData(); // Reset UI
-        }
-    } catch(error) {
-        alert("Terjadi kesalahan jaringan.");
-        fetchRequestsData(); // Reset UI
+    } catch(err) {
+        console.log("Proses background berjalan...");
     }
 }
 
-// Di akhir blok try dalam approveRequest, tambahkan:
-// fetchDashboardData(); 
-
+// ==========================================
+// FUNGSI REJECT INSTAN (OPTIMISTIC UI)
+// ==========================================
 async function rejectRequest(reqId, btnElement) {
     if(!confirm('Yakin ingin me-reject request ini?')) return;
     btnElement.innerText = "Processing...";
     btnElement.disabled = true;
 
+    // 1. Ubah tampilan layar secara INSTAN (tanpa nunggu server)
+    let reqIndex = globalData.findIndex(r => r.Request_ID === reqId);
+    if(reqIndex !== -1) {
+        globalData[reqIndex].Status = 'Rejected';
+        applyFilter(); // Tabel dan Summary langsung berubah!
+    }
+
+    // 2. Suruh server bekerja diam-diam di background
     try {
-        const res = await fetch(API_URL, {
+        fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'reject_request', payload: { Request_ID: reqId } })
         });
-        
-        // Kita tidak langsung res.json(), tapi kita panggil fetchDashboardData() secara eksplisit
-        // Karena respon suksesnya mungkin terpotong CORS.
-        fetchDashboardData(); 
-        
     } catch(err) {
-        // Karena Google Apps Script sering memicu CORS error sesaat setelah operasi sukses,
-        // kita paksa dashboard untuk refresh data alih-alih menampilkan pesan error palsu.
-        console.log("CORS Intercepted, forcing refresh...");
-        fetchDashboardData(); 
+        console.log("Proses background berjalan...");
     }
 }
 
