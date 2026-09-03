@@ -290,14 +290,18 @@ function toggleAccountFields() {
     document.getElementById('warehouseField').classList.toggle('hidden', role === 'Manager_All');
 }
 
-document.getElementById('addAccountForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+// ==========================================
+// FUNGSI SUBMIT ADD ACCOUNT
+// ==========================================
+async function submitNewAccount(e) {
+    e.preventDefault(); // Mencegah web me-refresh otomatis
+    
     const btn = document.getElementById('submitAccBtn');
     btn.innerText = "Memproses...";
     btn.disabled = true;
 
     const payload = {
-        Executor_Email: localStorage.getItem('manager_email'), // Digunakan server untuk validasi hak akses
+        Executor_Email: localStorage.getItem('manager_email'),
         Role: document.getElementById('accRole').value,
         Username_Email: document.getElementById('accUsername').value,
         Password: document.getElementById('accPassword').value,
@@ -315,15 +319,14 @@ document.getElementById('addAccountForm').addEventListener('submit', async (e) =
             alert('Sukses: ' + result.message);
             closeAccountModal();
             document.getElementById('addAccountForm').reset();
-            toggleAccountFields(); // Reset tampilan form
+            toggleAccountFields(); // Reset tampilan
         } else {
-            // Akan muncul jika yang mencoba bukan Manager_All atau email sudah ada
             alert('Gagal: ' + result.message);
         }
     } catch(err) {
-        alert('Gagal koneksi ke server.');
+        alert('Gagal koneksi ke server. Pastikan API_URL sudah benar.');
     } finally {
         btn.innerText = "Simpan Akun";
         btn.disabled = false;
     }
-});
+}
