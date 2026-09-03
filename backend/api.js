@@ -15,6 +15,7 @@ function doPost(e) {
     // ROUTING BARU UNTUK SECURITY APP
     else if (action === "security_login") return handleSecurityLogin(data.payload);
     else if (action === "security_register") return handleSecurityRegister(data.payload);
+    else if (action === "add_account") return handleAddAccount(data.payload);
     else if (action === "scan_qr") return handleScanQR(data.payload);
     else if (action === "check_in") return handleCheckIn(data.payload);
     else if (action === "get_expected_visitors") return handleGetExpectedVisitors(data.payload);
@@ -331,4 +332,41 @@ function handleSecurityRegister(payload) {
   
   // Catatan: Kita TIDAK menyimpan ke Account_Warehouse di sini, agar Admin yang menentukan.
   return createJsonResponse({ status: 'success', message: 'Registrasi berhasil! Silakan hubungi Admin untuk assign gudang sebelum login.' });
+}
+
+// ==========================================
+// FUNGSI TAMBAH AKUN (KHUSUS MANAGER_ALL)
+// ==========================================
+function handleAddAccount(payload) {
+  let executorEmail = payload.Executor_Email;
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let accSheet = ss.getSheetByName("Master_Account");
+  let accData = accSheet.getDataRange().getValues();
+
+  // 1. Validasi: Pastikan yang mengeksekusi adalah Manager_All
+  let isManagerAll = false;
+  for(let i=1; i<accData.length; i++) {
+    if(accData[i][0] === executorEmail && accData[i][2] === "Manager_All") {
+      isManagerAll = true; break;
+    }
+  }
+  if(!isManagerAll) return createJsonResponse({status: 'error', message: 'Akses Ditolak! Hanya Manager_All yang dapat menambah akun baru.'});
+
+  // 2. Cek apakah Username/Email sudah ada
+  for(let i=1; i<accData.length; i++) {
+    if(accData[i][0] === payload.Username_Email) {
+      return createJsonResponse({status: 'error', message: 'Username atau Email tersebut sudah terdaftar.'});
+    }
+  }
+
+  // 3. Simpan ke sheet Master_Account (Format: Email/Username, Password, Role)
+  accSheet.appendRow([payload.Username_Email, payload.Password || "", payload.Role]);
+
+  // 4. Jika ada input Gudang dan Rolenya bukan Manager_All, simpan ke Account_Warehouse
+  if(payload.Warehouse && payload.Role !== "Manager_All") {
+     let whSheet = ss.getSheetByName("Account_Warehouse");
+     whSheet.appendRow([payload.Username_Email, payload.Warehouse]);
+  }
+
+  return createJsonResponse({status: 'success', message: 'Akun berhasil ditambahkan!'});
 }

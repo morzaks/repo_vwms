@@ -276,3 +276,54 @@ async function fetchDashboardDataInBackground() {
         console.log("Auto-refresh tertunda karena jaringan...");
     }
 }
+
+// ==========================================
+// FUNGSI ADD ACCOUNT (MODAL & SUBMIT)
+// ==========================================
+function openAccountModal() { document.getElementById('accountModal').classList.remove('hidden'); }
+function closeAccountModal() { document.getElementById('accountModal').classList.add('hidden'); }
+
+// Fungsi untuk menyembunyikan/menampilkan form input sesuai Role
+function toggleAccountFields() {
+    let role = document.getElementById('accRole').value;
+    document.getElementById('passwordField').classList.toggle('hidden', role !== 'Security');
+    document.getElementById('warehouseField').classList.toggle('hidden', role === 'Manager_All');
+}
+
+document.getElementById('addAccountForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitAccBtn');
+    btn.innerText = "Memproses...";
+    btn.disabled = true;
+
+    const payload = {
+        Executor_Email: localStorage.getItem('manager_email'), // Digunakan server untuk validasi hak akses
+        Role: document.getElementById('accRole').value,
+        Username_Email: document.getElementById('accUsername').value,
+        Password: document.getElementById('accPassword').value,
+        Warehouse: document.getElementById('accWarehouse').value
+    };
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'add_account', payload: payload })
+        });
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            alert('Sukses: ' + result.message);
+            closeAccountModal();
+            document.getElementById('addAccountForm').reset();
+            toggleAccountFields(); // Reset tampilan form
+        } else {
+            // Akan muncul jika yang mencoba bukan Manager_All atau email sudah ada
+            alert('Gagal: ' + result.message);
+        }
+    } catch(err) {
+        alert('Gagal koneksi ke server.');
+    } finally {
+        btn.innerText = "Simpan Akun";
+        btn.disabled = false;
+    }
+});
