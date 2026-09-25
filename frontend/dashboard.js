@@ -209,8 +209,15 @@ function logout() {
 // ==========================================
 // INISIALISASI AWAL (SAAT HALAMAN DIBUKA)
 // ==========================================
-fetchRequestsData(); // Tarik data tabel
-loadVisitorRoles();  // Tarik opsi tagging role
+async function initDashboard() {
+    // 1. Tarik data tabel utama dulu (Prioritas UI)
+    await fetchRequestsData(); 
+    
+    // 2. Setelah tabel beres, baru diam-diam tarik data role untuk modal
+    await loadVisitorRoles();  
+}
+
+initDashboard(); // Jalankan antrian
 
 // EXPORT TO CSV
 function exportToCSV() {
