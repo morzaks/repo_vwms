@@ -123,9 +123,10 @@ function renderTable(data) {
                 actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-3 rounded cursor-not-allowed">Ditolak</button>`;
             } else { // Jika Pending
                 statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Pending</span>';
+                // Ganti bagian tombol Approve yang lama menjadi seperti ini:
                 actionBtn = `
                     <div class="flex gap-2 justify-center">
-                        <button onclick="approveRequest('${req.Request_ID}', this)" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition">Approve</button>
+                        <button onclick="openApproveModal('${req.Request_ID}')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition">Approve</button>
                         <button onclick="rejectRequest('${req.Request_ID}', this)" class="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition">Reject</button>
                     </div>`;
             }
@@ -327,6 +328,58 @@ async function submitNewAccount(e) {
         alert('Gagal koneksi ke server. Pastikan API_URL sudah benar.');
     } finally {
         btn.innerText = "Simpan Akun";
+        btn.disabled = false;
+    }
+}
+
+// ==========================================
+// MODAL & LOGIKA APPROVE DENGAN TAGGING ROLE
+// ==========================================
+let selectedRequestId = "";
+
+function openApproveModal(reqId) {
+    selectedRequestId = reqId;
+    document.getElementById('visitor_role').value = ""; // Reset pilihan
+    document.getElementById('approveModal').classList.remove('hidden');
+}
+
+function closeApproveModal() {
+    document.getElementById('approveModal').classList.add('hidden');
+}
+
+async function submitApproveWithRole() {
+    const btn = document.getElementById('confirmApproveBtn');
+    const role = document.getElementById('visitor_role').value;
+    
+    btn.innerText = "Memproses...";
+    btn.disabled = true;
+
+    // 1. Update tampilan secara instan (Optimistic UI)
+    let reqIndex = globalData.findIndex(r => r.Request_ID === selectedRequestId);
+    if(reqIndex !== -1) {
+        globalData[reqIndex].Status = 'Approved';
+        applyFilter(); 
+    }
+
+    closeApproveModal();
+
+    // 2. Kirim data ke Backend API (termasuk Visitor_Role pilihan manager)
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: 'approve_request', 
+                payload: { 
+                    Request_ID: selectedRequestId, 
+                    Visitor_Role: role,
+                    Manager_Email: localStorage.getItem('manager_email') 
+                } 
+            })
+        });
+    } catch(err) {
+        console.log("Proses background berjalan...");
+    } finally {
+        btn.innerText = "Confirm Approve";
         btn.disabled = false;
     }
 }

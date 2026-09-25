@@ -7,7 +7,7 @@ const departmentInput = document.getElementById('Department');
 const companyInput = document.getElementById('Company');
 const submitBtn = document.getElementById('submitBtn');
 
-let whSelectInstance; // Menyimpan instance dropdown searchable
+let whSelectInstance; 
 
 categorySelect.addEventListener('change', function() {
     if (this.value === 'Internal') {
@@ -39,9 +39,10 @@ form.addEventListener('submit', async function(e) {
         Category: categorySelect.value,
         Department: departmentInput.value || '-', 
         Company: companyInput.value,
-        Visit_Date: document.getElementById('Visit_Date').value,
         Visit_Purpose: document.getElementById('Visit_Purpose').value,
-        Warehouse_Code: document.getElementById('Warehouse_Code').value
+        Start_Date: document.getElementById("start_date").value,
+        Visit_Duration: document.getElementById("visit_duration").value,
+        Warehouse_Code: document.getElementById("Warehouse_Code").value
     };
 
     const requestBody = {
@@ -62,18 +63,14 @@ form.addEventListener('submit', async function(e) {
             body: JSON.stringify(requestBody)
         });
     } catch (error) {
-        // Jika Google telat membalas atau kena blokir CORS, abaikan saja.
-        // Data 99% pasti sudah masuk ke Spreadsheet.
         console.log('Proses background berjalan. Error jaringan diabaikan.');
     } finally {
-        // Kembalikan tombol seperti semula
         submitBtn.innerHTML = 'Submit Request';
         submitBtn.disabled = false;
         submitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
     }
 });
 
-// Fungsi untuk menutup modal
 function closeModal() {
     document.getElementById('successModal').classList.add('hidden');
 }
@@ -98,7 +95,6 @@ async function loadWarehouses() {
                 whSelect.appendChild(option);
             });
 
-            // Ubah dropdown biasa menjadi Searchable Dropdown
             whSelectInstance = new TomSelect("#Warehouse_Code", {
                 create: false,
                 sortField: {
@@ -106,7 +102,6 @@ async function loadWarehouses() {
                     direction: "asc"
                 }
             });
-
         } else {
             whSelect.innerHTML = '<option value="">Gagal memuat data dari server</option>';
         }

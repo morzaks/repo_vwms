@@ -12,7 +12,9 @@ function doPost(e) {
     else if (action === "approve_request") return handleApproveRequest(data.payload);
     else if (action === "reject_request") return handleRejectRequest(data.payload);
     else if (action === "get_warehouses") return handleGetWarehouses();
-    // ROUTING BARU UNTUK SECURITY APP
+    else if (action === "get_options") return handleGetOptions(); // ROUTING BARU UNTUK DROPDOWN
+    
+    // ROUTING UNTUK SECURITY APP
     else if (action === "security_login") return handleSecurityLogin(data.payload);
     else if (action === "security_register") return handleSecurityRegister(data.payload);
     else if (action === "add_account") return handleAddAccount(data.payload);
@@ -31,13 +33,21 @@ function handleVisitorSubmit(payload) {
   let sheet = ss.getSheetByName("Visitor_Request");
   let timestamp = new Date();
   let requestId = "REQ-" + Utilities.formatDate(timestamp, "GMT+7", "yyyyMMddHHmmss");
+  
+  // Kalkulasi End_Date
+  let startDateObj = new Date(payload.Start_Date);
+  let durationDays = parseInt(payload.Visit_Duration) || 1; 
+  startDateObj.setDate(startDateObj.getDate() + (durationDays - 1));
+  let endDateStr = Utilities.formatDate(startDateObj, "GMT+7", "yyyy-MM-dd");
+
+  // Format array: A (ReqID) sampai N (Visitor_Role)
   let rowData = [
     requestId, timestamp, payload.Name, payload.Email, payload.ID_Number,
-    payload.Category, payload.Department, payload.Company, payload.Visit_Date,
-    payload.Visit_Purpose, payload.Warehouse_Code, "Pending"
+    payload.Category, payload.Department, payload.Company, payload.Start_Date,
+    payload.Visit_Purpose, payload.Warehouse_Code, "Pending", endDateStr, ""
   ];
   sheet.appendRow(rowData);
-  return createJsonResponse({ status: 'success', message: 'Visitor request submitted successfully', data: { request_id: requestId } });
+  return createJsonResponse({ status: 'success', message: 'Visitor request submitted successfully', data: { request_id: requestId, end_date: endDateStr } });
 }
 
 function handleRequestOtp(payload) {
@@ -79,22 +89,29 @@ function handleVerifyOtp(payload) {
 
 function handleApproveRequest(payload) {
   let reqId = payload.Request_ID;
+  let visitorRole = payload.Visitor_Role || "Eksternal non Client - Perlu Cek"; // Default fallback
+  
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
   let data = sheet.getDataRange().getValues();
-  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", visitDate = "";
+  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", startDate = "", endDate = "";
   
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) { 
         rowIndex = i + 1; visitorName = data[i][2]; visitorEmail = data[i][3]; 
-        whCode = data[i][10]; visitDate = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
+        whCode = data[i][10]; 
+        startDate = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
+        endDate = Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy");
         break; 
     }
   }
   if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
   
-  sheet.getRange(rowIndex, 12).setValue("Approved");
+  sheet.getRange(rowIndex, 12).setValue("Approved"); // Col L
+  sheet.getRange(rowIndex, 14).setValue(visitorRole); // Col N (Visitor Role)
+  
   let qrUrl = "https://quickchart.io/qr?text=" + reqId + "&size=300";
+  let masaBerlaku = startDate === endDate ? startDate : `${startDate} s/d ${endDate}`;
   
   let htmlBody = `
     <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
@@ -104,7 +121,8 @@ function handleApproveRequest(payload) {
         <p>Demi menjaga kenyamanan dan keamanan semua pihak, untuk memasuki area <b>Warehouse Shipper (${whCode})</b>, setiap visitor diwajibkan menunjukkan barcode visitor sebagai tanda pengenal.</p>
         <p style="font-style: italic; color: #555;">To ensure safety and convenience for all parties, all visitors entering the <b>Shipper Warehouse (${whCode})</b> are required to present a visitor barcode as an identification pass.</p>
         <p><b>QR Code berikut dapat dipindai oleh petugas Security sebagai bukti akses masuk ke area warehouse.</b></p>
-        <p><b>Masa berlaku barcode:</b> ${visitDate}</p>
+        <p><b>Masa berlaku barcode:</b> ${masaBerlaku}</p>
+        <p><b>Kategori Akses:</b> ${visitorRole}</p>
         <div style="margin: 20px 0;">
             <a href="${qrUrl}" download="Barcode_${reqId}.png">
                 <img src="${qrUrl}" alt="QR Code" style="width: 250px; height: 250px; border: 1px solid #ddd;"/>
@@ -138,13 +156,12 @@ function handleGetAllRequests(payload) {
     let whCode = data[i][10], status = data[i][11];
     let hasAccess = (role === "Manager_All") || (role === "Manager" && allowedWH.includes(whCode));
     
-    // TAMBAHAN: Memasukkan status Rejected agar tidak hilang dari dashboard
     if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In" || status === "Rejected" || status === "Rejected (Auto)")) { 
       allData.push({
         Request_ID: data[i][0], Name: data[i][2], Company: data[i][7],
-        Raw_Date: new Date(data[i][8]).toISOString(), 
-        Visit_Date: Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy"), 
-        Warehouse_Code: whCode, Status: status
+        Start_Date: Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy"), 
+        End_Date: Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy"), 
+        Warehouse_Code: whCode, Status: status, Visitor_Role: data[i][13]
       });
     }
   }
@@ -173,8 +190,18 @@ function handleGetWarehouses() {
   return createJsonResponse({ status: 'success', data: warehouses });
 }
 
+// FUNGSI BARU: AMBIL OPTION UNTUK DROPDOWN ROLE
+function handleGetOptions() {
+  let data = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Master_Option").getDataRange().getValues();
+  let roles = [];
+  for (let i = 1; i < data.length; i++) { 
+    if(data[i][0] === "Visitor_Role" && data[i][1]) roles.push(data[i][1]); 
+  }
+  return createJsonResponse({ status: 'success', data: roles });
+}
+
 // ==========================================
-// FUNGSI SECURITY APP (BARU)
+// FUNGSI SECURITY APP
 // ==========================================
 function handleSecurityLogin(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -192,7 +219,7 @@ function handleSecurityLogin(payload) {
   for(let i=1; i<whData.length; i++) {
     if(whData[i][0] === username) { whCode = whData[i][1]; break; }
   }
-  if(!whCode) return createJsonResponse({ status: 'error', message: 'Akun belum bisa digunakan karena akun belum di-assign ke warehouse tujuan, harap hubungi admin.' });
+  if(!whCode) return createJsonResponse({ status: 'error', message: 'Akun belum di-assign ke warehouse tujuan.' });
   
   return createJsonResponse({ status: 'success', data: { username: username, warehouse_code: whCode } });
 }
@@ -205,31 +232,34 @@ function handleScanQR(payload) {
   
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) {
-      // Menambahkan ID_Number: data[i][4] ke dalam reqData
         reqData = { 
             Request_ID: data[i][0], Name: data[i][2], ID_Number: data[i][4], 
-            Company: data[i][7], Visit_Date: data[i][8], Visit_Purpose: data[i][9], // INI TAMBAHANNYA
-            Warehouse_Code: data[i][10], Status: data[i][11] 
+            Company: data[i][7], Start_Date: data[i][8], Visit_Purpose: data[i][9], 
+            Warehouse_Code: data[i][10], Status: data[i][11], End_Date: data[i][12], Visitor_Role: data[i][13]
         };
       break;
     }
   }
   if(!reqData) return createJsonResponse({ status: 'error', message: 'Barcode tidak valid / Request tidak ditemukan' });
   
-  // LOGIKA VALIDASI
   if(reqData.Warehouse_Code !== secWh) return createJsonResponse({ status: 'error', message: `Salah lokasi! Visitor ini untuk gudang ${reqData.Warehouse_Code}` });
-  if(reqData.Status === "Pending") return createJsonResponse({ status: 'error', message: 'Ditolak: Request ini belum di-Approve oleh Manager.' });
-  if(reqData.Status === "Checked-In") return createJsonResponse({ status: 'error', message: 'Ditolak: Visitor ini sudah melakukan Check-In sebelumnya.' });
+  if(reqData.Status === "Pending") return createJsonResponse({ status: 'error', message: 'Ditolak: Request ini belum di-Approve.' });
+  if(reqData.Status === "Checked-In") return createJsonResponse({ status: 'error', message: 'Ditolak: Visitor sudah Check-In.' });
   
-  let visitDateStr = Utilities.formatDate(new Date(reqData.Visit_Date), "GMT+7", "yyyy-MM-dd");
-  let todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+  // Validasi Range Tanggal
+  let today = new Date(); today.setHours(0,0,0,0);
+  let startObj = new Date(reqData.Start_Date); startObj.setHours(0,0,0,0);
+  let endObj = new Date(reqData.End_Date); endObj.setHours(0,0,0,0);
   
-  if(visitDateStr !== todayStr) {
-    let tglAsli = Utilities.formatDate(new Date(reqData.Visit_Date), "GMT+7", "dd MMM yyyy");
-    return createJsonResponse({ status: 'error', message: `Ditolak: Jadwal kunjungan salah (Seharusnya: ${tglAsli})` });
+  if(today < startObj || today > endObj) {
+    let tglMulai = Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy");
+    let tglSelesai = Utilities.formatDate(endObj, "GMT+7", "dd MMM yyyy");
+    let rangeText = tglMulai === tglSelesai ? tglMulai : `${tglMulai} s/d ${tglSelesai}`;
+    return createJsonResponse({ status: 'error', message: `Ditolak: Di luar jadwal kunjungan (${rangeText})` });
   }
   
-  reqData.Visit_Date = Utilities.formatDate(new Date(reqData.Visit_Date), "GMT+7", "dd MMM yyyy");
+  reqData.Masa_Berlaku = (startObj.getTime() === endObj.getTime()) ? Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy") : `${Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy")} s/d ${Utilities.formatDate(endObj, "GMT+7", "dd MMM yyyy")}`;
+  
   return createJsonResponse({ status: 'success', data: reqData });
 }
 
@@ -245,10 +275,8 @@ function handleCheckIn(payload) {
   }
   if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
   
-  // Update status Checked-In
   sheet.getRange(rowIndex, 12).setValue("Checked-In");
   
-  // Insert Log
   let timestamp = new Date();
   let scanId = "SCAN-" + Utilities.formatDate(timestamp, "GMT+7", "yyyyMMddHHmmss");
   ss.getSheetByName("Visitor_Scan_Log").appendRow([scanId, reqId, secUsername, secWh, timestamp, "Check-In Success"]);
@@ -256,117 +284,94 @@ function handleCheckIn(payload) {
   return createJsonResponse({ status: 'success', message: 'Check-In Berhasil disimpan!' });
 }
 
-function createJsonResponse(responseObject) { return ContentService.createTextOutput(JSON.stringify(responseObject)).setMimeType(ContentService.MimeType.JSON); }
-
-// --- FUNGSI BARU: DAFTAR TAMU HARI INI UNTUK SECURITY ---
 function handleGetExpectedVisitors(payload) {
   let secWh = payload.Warehouse_Code;
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
   
-  // Format hari ini untuk dicocokkan
-  let todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+  let today = new Date(); today.setHours(0,0,0,0);
   let expectedList = [];
 
   for(let i=1; i<data.length; i++) {
     let reqWh = data[i][10];
     let status = data[i][11];
-    let visitDateStr = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "yyyy-MM-dd");
+    
+    // Cek apakah data ini valid (punya start & end date)
+    if(data[i][8] && data[i][12]) {
+        let startObj = new Date(data[i][8]); startObj.setHours(0,0,0,0);
+        let endObj = new Date(data[i][12]); endObj.setHours(0,0,0,0);
 
-    // Jika Gudang cocok, Status Approved, dan Tanggal Kunjungan adalah Hari Ini
-    if(reqWh === secWh && status === "Approved" && visitDateStr === todayStr) {
-      expectedList.push({
-        Request_ID: data[i][0],
-        Name: data[i][2],
-        Company: data[i][7]
-      });
+        // Jika Gudang cocok, Status Approved, dan HARI INI berada di antara Start dan End
+        if(reqWh === secWh && status === "Approved" && today >= startObj && today <= endObj) {
+          expectedList.push({ Request_ID: data[i][0], Name: data[i][2], Company: data[i][7] });
+        }
     }
   }
   return createJsonResponse({ status: 'success', data: expectedList });
 }
 
-// ==========================================
-// FUNGSI CRON JOB: AUTO-REJECT EXPIRED REQUESTS
-// ==========================================
 function autoRejectExpiredRequests() {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
   let data = sheet.getDataRange().getValues();
   
-  // Set waktu hari ini ke jam 00:00:00 untuk perbandingan yang akurat
-  let today = new Date();
-  today.setHours(0, 0, 0, 0);
+  let today = new Date(); today.setHours(0, 0, 0, 0);
 
-  // Looping mulai dari baris 2 (index 1)
   for (let i = 1; i < data.length; i++) {
     let status = data[i][11];
-    let visitDate = new Date(data[i][8]);
-    visitDate.setHours(0, 0, 0, 0);
+    if(data[i][12]) {
+        let endDate = new Date(data[i][12]);
+        endDate.setHours(0, 0, 0, 0);
 
-    // Jika status masih Pending DAN tanggal kunjungannya sudah terlewat
-    if (status === "Pending" && visitDate < today) {
-      // Ubah status di Spreadsheet menjadi Rejected (Auto)
-      sheet.getRange(i + 1, 12).setValue("Rejected (Auto)");
+        // Expired jika End_Date sudah lewat
+        if (status === "Pending" && endDate < today) {
+          sheet.getRange(i + 1, 12).setValue("Rejected (Auto)");
+        }
     }
   }
 }
 
-// ==========================================
-// FUNGSI REGISTER SECURITY (BARU)
-// ==========================================
 function handleSecurityRegister(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let accSheet = ss.getSheetByName("Master_Account");
   let data = accSheet.getDataRange().getValues();
   let username = payload.Username;
   
-  // 1. Cek apakah username sudah dipakai
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === username) {
-      return createJsonResponse({ status: 'error', message: 'Username sudah terdaftar. Silakan gunakan username lain.' });
-    }
+    if (data[i][0] === username) return createJsonResponse({ status: 'error', message: 'Username sudah terdaftar.' });
   }
   
-  // 2. Simpan ke sheet Master_Account dengan Role "Security"
   accSheet.appendRow([username, payload.Password, "Security"]);
-  
-  // Catatan: Kita TIDAK menyimpan ke Account_Warehouse di sini, agar Admin yang menentukan.
-  return createJsonResponse({ status: 'success', message: 'Registrasi berhasil! Silakan hubungi Admin untuk assign gudang sebelum login.' });
+  return createJsonResponse({ status: 'success', message: 'Registrasi berhasil! Hubungi Admin untuk assign gudang.' });
 }
 
-// ==========================================
-// FUNGSI TAMBAH AKUN (KHUSUS MANAGER_ALL)
-// ==========================================
 function handleAddAccount(payload) {
   let executorEmail = payload.Executor_Email;
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let accSheet = ss.getSheetByName("Master_Account");
   let accData = accSheet.getDataRange().getValues();
 
-  // 1. Validasi: Pastikan yang mengeksekusi adalah Manager_All
   let isManagerAll = false;
   for(let i=1; i<accData.length; i++) {
     if(accData[i][0] === executorEmail && accData[i][2] === "Manager_All") {
       isManagerAll = true; break;
     }
   }
-  if(!isManagerAll) return createJsonResponse({status: 'error', message: 'Akses Ditolak! Hanya Manager_All yang dapat menambah akun baru.'});
+  if(!isManagerAll) return createJsonResponse({status: 'error', message: 'Akses Ditolak!'});
 
-  // 2. Cek apakah Username/Email sudah ada
   for(let i=1; i<accData.length; i++) {
-    if(accData[i][0] === payload.Username_Email) {
-      return createJsonResponse({status: 'error', message: 'Username atau Email tersebut sudah terdaftar.'});
-    }
+    if(accData[i][0] === payload.Username_Email) return createJsonResponse({status: 'error', message: 'Akun sudah terdaftar.'});
   }
 
-  // 3. Simpan ke sheet Master_Account (Format: Email/Username, Password, Role)
   accSheet.appendRow([payload.Username_Email, payload.Password || "", payload.Role]);
 
-  // 4. Jika ada input Gudang dan Rolenya bukan Manager_All, simpan ke Account_Warehouse
   if(payload.Warehouse && payload.Role !== "Manager_All") {
-     let whSheet = ss.getSheetByName("Account_Warehouse");
-     whSheet.appendRow([payload.Username_Email, payload.Warehouse]);
+     ss.getSheetByName("Account_Warehouse").appendRow([payload.Username_Email, payload.Warehouse]);
   }
 
   return createJsonResponse({status: 'success', message: 'Akun berhasil ditambahkan!'});
+}
+
+function createJsonResponse(responseObject) { 
+    return ContentService.createTextOutput(JSON.stringify(responseObject)).setMimeType(ContentService.MimeType.JSON); 
 }
