@@ -7,6 +7,7 @@ document.getElementById('userEmailDisplay').textContent = managerEmail;
 let globalData = []; 
 let currentFilteredData = []; 
 
+// FUNGSI LOAD DATA REQUESTS DARI API
 async function fetchRequestsData() {
     try {
         const response = await fetch(API_URL, {
@@ -26,6 +27,37 @@ async function fetchRequestsData() {
     }
 }
 
+// FUNGSI LOAD TAGGING ROLE DARI SPREADSHEET (MASTER_OPTION)
+async function loadVisitorRoles() {
+    const roleSelect = document.getElementById('visitor_role');
+    if (!roleSelect) return;
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'get_options' }) 
+        });
+        const result = await response.json();
+
+        if(result.status === 'success') {
+            roleSelect.innerHTML = '<option value="">-- Kosongkan untuk Default (Wajib Cek KTP) --</option>';
+            
+            result.data.forEach(role => {
+                const option = document.createElement('option');
+                option.value = role;
+                option.textContent = role;
+                roleSelect.appendChild(option);
+            });
+        } else {
+            roleSelect.innerHTML = '<option value="">Gagal memuat opsi</option>';
+        }
+    } catch (error) {
+        console.error('Error fetching visitor roles:', error);
+        roleSelect.innerHTML = '<option value="">Terjadi kesalahan jaringan</option>';
+    }
+}
+
+// FUNGSI FILTER TANGGAL
 function applyFilter() {
     let filteredData = globalData;
     const startDate = document.getElementById('filterStartDate').value;
@@ -41,7 +73,6 @@ function applyFilter() {
     }
 
     currentFilteredData = filteredData; 
-
     renderSummaryCards(filteredData);
     renderTable(filteredData);
 }
@@ -52,6 +83,7 @@ function resetFilter() {
     applyFilter();
 }
 
+// RENDER SUMMARY CARDS
 function renderSummaryCards(data) {
     const summaryCards = document.getElementById('summaryCards');
     summaryCards.innerHTML = ''; 
@@ -95,6 +127,7 @@ function renderSummaryCards(data) {
     }
 }
 
+// RENDER TABEL UTAMA
 function renderTable(data) {
     const tableBody = document.getElementById('tableBody');
     tableBody.innerHTML = ''; 
@@ -146,9 +179,7 @@ function renderTable(data) {
     }
 }
 
-// ==========================================
-// FUNGSI REJECT INSTAN (OPTIMISTIC UI)
-// ==========================================
+// FUNGSI REJECT
 async function rejectRequest(reqId, btnElement) {
     if(!confirm('Yakin ingin me-reject request ini?')) return;
     btnElement.innerText = "Processing...";
@@ -175,11 +206,13 @@ function logout() {
     window.location.href = 'manager.html';
 }
 
-fetchRequestsData();
+// ==========================================
+// INISIALISASI AWAL (SAAT HALAMAN DIBUKA)
+// ==========================================
+fetchRequestsData(); // Tarik data tabel
+loadVisitorRoles();  // Tarik opsi tagging role
 
-// ==========================================
-// FUNGSI EXPORT KE CSV
-// ==========================================
+// EXPORT TO CSV
 function exportToCSV() {
     if (currentFilteredData.length === 0) {
         alert("Tidak ada data untuk di-export!");
@@ -210,9 +243,7 @@ function exportToCSV() {
     document.body.removeChild(link);
 }
 
-// ==========================================
-// AUTO REFRESH
-// ==========================================
+// AUTO REFRESH DASHBOARD (BACKGROUND)
 setInterval(() => {
     fetchDashboardDataInBackground();
 }, 15000);
@@ -237,9 +268,7 @@ async function fetchDashboardDataInBackground() {
     }
 }
 
-// ==========================================
-// FUNGSI ADD ACCOUNT (MODAL & SUBMIT)
-// ==========================================
+// ADD ACCOUNT (MODAL & LOGIC)
 function openAccountModal() { document.getElementById('accountModal').classList.remove('hidden'); }
 function closeAccountModal() { document.getElementById('accountModal').classList.add('hidden'); }
 
@@ -251,7 +280,6 @@ function toggleAccountFields() {
 
 async function submitNewAccount(e) {
     e.preventDefault(); 
-    
     const btn = document.getElementById('submitAccBtn');
     btn.innerText = "Memproses...";
     btn.disabled = true;
@@ -280,16 +308,14 @@ async function submitNewAccount(e) {
             alert('Gagal: ' + result.message);
         }
     } catch(err) {
-        alert('Gagal koneksi ke server. Pastikan API_URL sudah benar.');
+        alert('Gagal koneksi ke server.');
     } finally {
         btn.innerText = "Simpan Akun";
         btn.disabled = false;
     }
 }
 
-// ==========================================
-// MODAL & LOGIKA APPROVE DENGAN TAGGING ROLE
-// ==========================================
+// MODAL APPROVE (TAGGING ROLE)
 let selectedRequestId = "";
 
 function openApproveModal(reqId) {
