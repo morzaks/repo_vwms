@@ -4,10 +4,9 @@ const managerEmail = localStorage.getItem('manager_email');
 if(!managerEmail) window.location.href = 'manager.html'; 
 document.getElementById('userEmailDisplay').textContent = managerEmail;
 
-let globalData = []; // Menyimpan semua data dari API agar tidak perlu loading berulang
-let currentFilteredData = []; // VARIABEL BARU UNTUK MENYIMPAN DATA YANG AKAN DI-EXPORT
+let globalData = []; 
+let currentFilteredData = []; 
 
-// FUNGSI LOAD DATA DARI API (Sekali panggil)
 async function fetchRequestsData() {
     try {
         const response = await fetch(API_URL, {
@@ -18,7 +17,7 @@ async function fetchRequestsData() {
 
         if(result.status === 'success') {
             globalData = result.data;
-            applyFilter(); // Render ke tabel & summary
+            applyFilter(); 
         } else {
             alert("Error: " + result.message);
         }
@@ -27,7 +26,6 @@ async function fetchRequestsData() {
     }
 }
 
-// FUNGSI FILTER TANGGAL (Berjalan cepat di browser)
 function applyFilter() {
     let filteredData = globalData;
     const startDate = document.getElementById('filterStartDate').value;
@@ -37,13 +35,12 @@ function applyFilter() {
         filteredData = filteredData.filter(req => new Date(req.Raw_Date) >= new Date(startDate));
     }
     if (endDate) {
-        // Set waktu di ujung hari agar mencakup keseluruhan hari tersebut
         let end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
         filteredData = filteredData.filter(req => new Date(req.Raw_Date) <= end);
     }
 
-    currentFilteredData = filteredData; // SIMPAN DATA KE VARIABEL BARU INI
+    currentFilteredData = filteredData; 
 
     renderSummaryCards(filteredData);
     renderTable(filteredData);
@@ -55,10 +52,9 @@ function resetFilter() {
     applyFilter();
 }
 
-// FUNGSI RENDER SUMMARY CARDS (Menambahkan baris "Ditolak")
 function renderSummaryCards(data) {
     const summaryCards = document.getElementById('summaryCards');
-    summaryCards.innerHTML = ''; // Bersihkan container
+    summaryCards.innerHTML = ''; 
     
     let whGroups = {};
 
@@ -99,7 +95,6 @@ function renderSummaryCards(data) {
     }
 }
 
-// FUNGSI RENDER TABEL (Menambahkan kondisi Rejected)
 function renderTable(data) {
     const tableBody = document.getElementById('tableBody');
     tableBody.innerHTML = ''; 
@@ -121,9 +116,8 @@ function renderTable(data) {
             } else if (req.Status === 'Rejected' || req.Status === 'Rejected (Auto)') {
                 statusBadge = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Rejected</span>';
                 actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-3 rounded cursor-not-allowed">Ditolak</button>`;
-            } else { // Jika Pending
+            } else { 
                 statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Pending</span>';
-                // Ganti bagian tombol Approve yang lama menjadi seperti ini:
                 actionBtn = `
                     <div class="flex gap-2 justify-center">
                         <button onclick="openApproveModal('${req.Request_ID}')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition">Approve</button>
@@ -131,11 +125,14 @@ function renderTable(data) {
                     </div>`;
             }
 
+            // Cegah error tampilan jika tanggal bernilai "undefined"
+            let tanggalTampil = (req.Visit_Date && req.Visit_Date !== "undefined") ? req.Visit_Date : "-";
+
             tr.innerHTML = `
                 <td class="p-4 text-sm font-medium text-slate-700">${req.Request_ID}</td>
                 <td class="p-4 text-sm text-slate-600">${req.Name}</td>
                 <td class="p-4 text-sm text-slate-600">${req.Company}</td>
-                <td class="p-4 text-sm text-slate-600">${req.Visit_Date}</td>
+                <td class="p-4 text-sm text-slate-600">${tanggalTampil}</td>
                 <td class="p-4 text-sm text-slate-600">
                     <span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">${req.Warehouse_Code}</span>
                 </td>
@@ -150,35 +147,6 @@ function renderTable(data) {
 }
 
 // ==========================================
-// FUNGSI APPROVE INSTAN (OPTIMISTIC UI)
-// ==========================================
-async function approveRequest(reqId, btnElement) {
-    if(!confirm('Yakin ingin menyetujui request ini? Email barcode akan dikirim.')) return;
-    btnElement.innerText = "Processing...";
-    btnElement.disabled = true;
-
-    // 1. Ubah tampilan layar secara INSTAN (tanpa nunggu server)
-    let reqIndex = globalData.findIndex(r => r.Request_ID === reqId);
-    if(reqIndex !== -1) {
-        globalData[reqIndex].Status = 'Approved';
-        applyFilter(); // Render ulang tabel dan summary detik itu juga!
-    }
-
-    // 2. Suruh server bekerja diam-diam di background (Fire and forget)
-    try {
-        fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ 
-                action: 'approve_request', 
-                payload: { Request_ID: reqId, Manager_Email: localStorage.getItem('manager_email') } 
-            })
-        });
-    } catch(err) {
-        console.log("Proses background berjalan...");
-    }
-}
-
-// ==========================================
 // FUNGSI REJECT INSTAN (OPTIMISTIC UI)
 // ==========================================
 async function rejectRequest(reqId, btnElement) {
@@ -186,14 +154,12 @@ async function rejectRequest(reqId, btnElement) {
     btnElement.innerText = "Processing...";
     btnElement.disabled = true;
 
-    // 1. Ubah tampilan layar secara INSTAN (tanpa nunggu server)
     let reqIndex = globalData.findIndex(r => r.Request_ID === reqId);
     if(reqIndex !== -1) {
         globalData[reqIndex].Status = 'Rejected';
-        applyFilter(); // Tabel dan Summary langsung berubah!
+        applyFilter(); 
     }
 
-    // 2. Suruh server bekerja diam-diam di background
     try {
         fetch(API_URL, {
             method: 'POST',
@@ -209,7 +175,6 @@ function logout() {
     window.location.href = 'manager.html';
 }
 
-// Inisialisasi awal
 fetchRequestsData();
 
 // ==========================================
@@ -221,24 +186,20 @@ function exportToCSV() {
         return;
     }
 
-    // 1. Buat Header CSV
     let csvContent = "Request_ID,Nama,Perusahaan,Jadwal_Kunjungan,Gudang,Status\n";
 
-    // 2. Masukkan isi data (Looping)
     currentFilteredData.forEach(req => {
-        // Tanda kutip ditambahkan untuk mencegah error jika ada koma di nama perusahaan
         let name = `"${req.Name}"`;
         let company = `"${req.Company}"`;
+        let tanggalTampil = (req.Visit_Date && req.Visit_Date !== "undefined") ? req.Visit_Date : "-";
         
-        csvContent += `${req.Request_ID},${name},${company},${req.Visit_Date},${req.Warehouse_Code},${req.Status}\n`;
+        csvContent += `${req.Request_ID},${name},${company},${tanggalTampil},${req.Warehouse_Code},${req.Status}\n`;
     });
 
-    // 3. Buat File Virtual (Blob) dan Trigger Download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     
-    // Nama file otomatis menggunakan tanggal hari ini
     const todayDate = new Date().toISOString().slice(0,10);
     
     link.setAttribute("href", url);
@@ -250,9 +211,8 @@ function exportToCSV() {
 }
 
 // ==========================================
-// AUTO REFRESH (LIVE TIME DASHBOARD)
+// AUTO REFRESH
 // ==========================================
-// Menarik data terbaru secara diam-diam setiap 15 detik (15000 ms)
 setInterval(() => {
     fetchDashboardDataInBackground();
 }, 15000);
@@ -270,10 +230,9 @@ async function fetchDashboardDataInBackground() {
         
         if (result.status === 'success') {
             globalData = result.data;
-            applyFilter(); // Render ulang tabel & summary (tidak merusak filter jika sedang aktif)
+            applyFilter(); 
         }
     } catch(err) {
-        // Jika internet tiba-tiba putus, biarkan saja agar tidak mengganggu user (silent error)
         console.log("Auto-refresh tertunda karena jaringan...");
     }
 }
@@ -284,18 +243,14 @@ async function fetchDashboardDataInBackground() {
 function openAccountModal() { document.getElementById('accountModal').classList.remove('hidden'); }
 function closeAccountModal() { document.getElementById('accountModal').classList.add('hidden'); }
 
-// Fungsi untuk menyembunyikan/menampilkan form input sesuai Role
 function toggleAccountFields() {
     let role = document.getElementById('accRole').value;
     document.getElementById('passwordField').classList.toggle('hidden', role !== 'Security');
     document.getElementById('warehouseField').classList.toggle('hidden', role === 'Manager_All');
 }
 
-// ==========================================
-// FUNGSI SUBMIT ADD ACCOUNT
-// ==========================================
 async function submitNewAccount(e) {
-    e.preventDefault(); // Mencegah web me-refresh otomatis
+    e.preventDefault(); 
     
     const btn = document.getElementById('submitAccBtn');
     btn.innerText = "Memproses...";
@@ -320,7 +275,7 @@ async function submitNewAccount(e) {
             alert('Sukses: ' + result.message);
             closeAccountModal();
             document.getElementById('addAccountForm').reset();
-            toggleAccountFields(); // Reset tampilan
+            toggleAccountFields(); 
         } else {
             alert('Gagal: ' + result.message);
         }
@@ -339,7 +294,9 @@ let selectedRequestId = "";
 
 function openApproveModal(reqId) {
     selectedRequestId = reqId;
-    document.getElementById('visitor_role').value = ""; // Reset pilihan
+    if(document.getElementById('visitor_role')) {
+        document.getElementById('visitor_role').value = ""; 
+    }
     document.getElementById('approveModal').classList.remove('hidden');
 }
 
@@ -349,12 +306,12 @@ function closeApproveModal() {
 
 async function submitApproveWithRole() {
     const btn = document.getElementById('confirmApproveBtn');
-    const role = document.getElementById('visitor_role').value;
+    const roleEl = document.getElementById('visitor_role');
+    const role = roleEl ? roleEl.value : "";
     
     btn.innerText = "Memproses...";
     btn.disabled = true;
 
-    // 1. Update tampilan secara instan (Optimistic UI)
     let reqIndex = globalData.findIndex(r => r.Request_ID === selectedRequestId);
     if(reqIndex !== -1) {
         globalData[reqIndex].Status = 'Approved';
@@ -363,7 +320,6 @@ async function submitApproveWithRole() {
 
     closeApproveModal();
 
-    // 2. Kirim data ke Backend API (termasuk Visitor_Role pilihan manager)
     try {
         await fetch(API_URL, {
             method: 'POST',
