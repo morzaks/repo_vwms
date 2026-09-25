@@ -190,14 +190,25 @@ function handleGetWarehouses() {
   return createJsonResponse({ status: 'success', data: warehouses });
 }
 
-// FUNGSI BARU: AMBIL OPTION UNTUK DROPDOWN ROLE
 function handleGetOptions() {
-  let data = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Master_Option").getDataRange().getValues();
-  let roles = [];
+  let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName("Master_Option");
+  let data = sheet.getDataRange().getValues();
+  
+  let options = [];
+  
+  // Looping mulai dari baris ke-2 (index 1) untuk melewati Header
   for (let i = 1; i < data.length; i++) { 
-    if(data[i][0] === "Visitor_Role" && data[i][1]) roles.push(data[i][1]); 
+    let optionType = data[i][0]; // Kolom A
+    let optionValue = data[i][1]; // Kolom B
+    
+    // Tarik hanya jika Option_Type adalah "Visitor_Role"
+    if(optionType === "Visitor_Role" && optionValue !== "") {
+      options.push(optionValue);
+    }
   }
-  return createJsonResponse({ status: 'success', data: roles });
+  
+  return createJsonResponse({ status: 'success', data: options });
 }
 
 // ==========================================
