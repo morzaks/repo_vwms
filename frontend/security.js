@@ -6,7 +6,6 @@ const resultCard = document.getElementById('resultCard');
 let html5QrCode;
 let currentScannedRequest = "";
 
-// Cek Session
 const secUsername = localStorage.getItem('sec_username');
 const secWh = localStorage.getItem('sec_wh');
 
@@ -64,7 +63,6 @@ function startScanner() {
     html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
         { facingMode: "environment" }, 
-        // UBAH FPS MENJADI 3 DI SINI AGAR HP TIDAK CEPAT PANAS/LEMOT
         { fps: 3, qrbox: { width: 250, height: 250 } },
         onScanSuccess
     ).catch(err => alert("Kamera diblokir/tidak ditemukan."));
@@ -72,13 +70,16 @@ function startScanner() {
 
 // KETIKA QR BERHASIL TERBACA
 async function onScanSuccess(decodedText) {
-    html5QrCode.stop(); // Hentikan kamera sementara nge-fetch API
+    html5QrCode.stop(); 
     
     resultCard.classList.remove('hidden');
     document.getElementById('rescanBtn').classList.remove('hidden');
+    
+    // Reset State
     document.getElementById('resStatus').innerText = "Memvalidasi Barcode...";
     document.getElementById('resStatus').className = "font-bold text-lg mb-2 text-yellow-400";
     document.getElementById('resMsg').innerText = "Tunggu sebentar...";
+    document.getElementById('securityActionBanner').classList.add('hidden');
     document.getElementById('visitorDetails').classList.add('hidden');
     document.getElementById('checkInBtn').classList.add('hidden');
 
@@ -92,9 +93,23 @@ async function onScanSuccess(decodedText) {
         if(result.status === 'success') {
             // LULUS VALIDASI
             document.getElementById('resStatus').innerText = "VISITOR VALID";
-            document.getElementById('resStatus').className = "font-bold text-xl mb-2 text-green-400";
-            document.getElementById('resMsg').innerText = "Jadwal dan lokasi sesuai. Silakan Check In.";
+            document.getElementById('resStatus').className = "font-bold text-xl mb-2 text-green-400 text-center";
+            document.getElementById('resMsg').innerText = "Jadwal dan lokasi sesuai.";
             
+            // LOGIKA INDIKATOR CEK KTP (MERAH/HIJAU)
+            const banner = document.getElementById('securityActionBanner');
+            const bannerText = document.getElementById('securityActionText');
+            banner.classList.remove('hidden');
+            
+            if (result.data.Security_Action === "Not Check") {
+                banner.className = "p-3 rounded-lg font-bold text-center text-sm mb-4 shadow border bg-green-900 border-green-500 text-green-300";
+                bannerText.innerHTML = "✅ TANPA CEK KTP<br><span class='font-normal text-xs'>Visitor ini diizinkan masuk tanpa perlu pemeriksaan KTP.</span>";
+            } else {
+                banner.className = "p-3 rounded-lg font-bold text-center text-sm mb-4 shadow border bg-red-900 border-red-500 text-red-200 animate-pulse";
+                bannerText.innerHTML = "⚠️ WAJIB CEK KTP ASLI!<br><span class='font-normal text-xs'>Cocokkan KTP dengan Nama dan Nomor Identitas di bawah ini.</span>";
+            }
+            
+            // Data Visitor
             document.getElementById('visitorDetails').classList.remove('hidden');
             document.getElementById('vId').innerText = result.data.Request_ID;
             document.getElementById('vName').innerText = result.data.Name;
@@ -107,7 +122,7 @@ async function onScanSuccess(decodedText) {
         } else {
             // DITOLAK
             document.getElementById('resStatus').innerText = "AKSES DITOLAK";
-            document.getElementById('resStatus').className = "font-bold text-xl mb-2 text-red-500";
+            document.getElementById('resStatus').className = "font-bold text-xl mb-2 text-red-500 text-center";
             document.getElementById('resMsg').innerText = result.message;
         }
     } catch(err) {
@@ -133,6 +148,7 @@ document.getElementById('checkInBtn').addEventListener('click', async () => {
             document.getElementById('resStatus').innerText = "BERHASIL CHECK IN!";
             btn.classList.add('hidden');
             document.getElementById('resMsg').innerText = result.message;
+            document.getElementById('securityActionBanner').classList.add('hidden');
         } else {
             alert(result.message);
         }
@@ -155,13 +171,12 @@ function logout() {
 }
 
 // ==========================================
-// FUNGSI MODAL EXPECTED VISITORS (TAMU HARI INI)
+// FUNGSI MODAL EXPECTED VISITORS
 // ==========================================
 function openExpectedModal() {
     document.getElementById('expectedModal').classList.remove('hidden');
     fetchExpectedVisitors();
     
-    // Dibungkus try-catch agar kalau kamera HP tidak support 'pause', kode tetap jalan
     try {
         if(html5QrCode) html5QrCode.pause(); 
     } catch(err) {
@@ -194,7 +209,7 @@ async function fetchExpectedVisitors() {
         const result = await res.json();
 
         if(result.status === 'success') {
-            listContainer.innerHTML = ''; // Kosongkan
+            listContainer.innerHTML = ''; 
             
             if(result.data.length === 0) {
                 listContainer.innerHTML = `
@@ -205,7 +220,6 @@ async function fetchExpectedVisitors() {
                 return;
             }
 
-            // Looping data tamu
             result.data.forEach(visitor => {
                 const div = document.createElement('div');
                 div.className = "bg-slate-700 p-3 rounded-lg border-l-4 border-blue-500 shadow-md";
@@ -234,7 +248,6 @@ function toggleAuth(type) {
     const loginBlock = document.getElementById('loginBlock');
     const registerBlock = document.getElementById('registerBlock');
     
-    // Reset pesan
     document.getElementById('loginMessage').classList.add('hidden');
     document.getElementById('registerMessage').classList.add('hidden');
     document.getElementById('registerForm').reset();
@@ -257,7 +270,6 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     const pass = document.getElementById('regPassword').value;
     const pass2 = document.getElementById('regConfirmPassword').value;
 
-    // Validasi ketikan password
     if (pass !== pass2) {
         msg.textContent = "Password tidak cocok! Silakan cek kembali.";
         msg.className = "mt-4 text-center text-sm font-medium p-3 rounded-lg bg-red-900 text-red-200 block";

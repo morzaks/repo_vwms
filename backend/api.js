@@ -152,16 +152,26 @@ function handleGetAllRequests(payload) {
 
   let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
   let allData = [];
+  
   for(let i=1; i<data.length; i++) {
     let whCode = data[i][10], status = data[i][11];
     let hasAccess = (role === "Manager_All") || (role === "Manager" && allowedWH.includes(whCode));
     
     if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In" || status === "Rejected" || status === "Rejected (Auto)")) { 
+      
+      // LOGIKA BARU: Gabungkan Start Date dan End Date menjadi format yang rapi
+      let tglMulai = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
+      let tglSelesai = Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy");
+      let visitDateStr = (tglMulai === tglSelesai) ? tglMulai : tglMulai + " s/d " + tglSelesai;
+
       allData.push({
-        Request_ID: data[i][0], Name: data[i][2], Company: data[i][7],
-        Start_Date: Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy"), 
-        End_Date: Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy"), 
-        Warehouse_Code: whCode, Status: status, Visitor_Role: data[i][13]
+        Request_ID: data[i][0], 
+        Name: data[i][2], 
+        Company: data[i][7],
+        Visit_Date: visitDateStr, // <-- INI YANG DICARI OLEH DASHBOARD.JS
+        Warehouse_Code: whCode, 
+        Status: status, 
+        Visitor_Role: data[i][13]
       });
     }
   }
@@ -235,9 +245,14 @@ function handleSecurityLogin(payload) {
   return createJsonResponse({ status: 'success', data: { username: username, warehouse_code: whCode } });
 }
 
+// ==========================================
+// FUNGSI SCAN QR (UPDATE: LOGIKA MASTER OPTION CHECK/NOT CHECK)
+// ==========================================
 function handleScanQR(payload) {
   let reqId = payload.Request_ID, secWh = payload.Warehouse_Code;
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // 1. Ambil data Visitor Request
   let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
   let reqData = null;
   
@@ -253,11 +268,12 @@ function handleScanQR(payload) {
   }
   if(!reqData) return createJsonResponse({ status: 'error', message: 'Barcode tidak valid / Request tidak ditemukan' });
   
+  // 2. Validasi Lokasi & Status
   if(reqData.Warehouse_Code !== secWh) return createJsonResponse({ status: 'error', message: `Salah lokasi! Visitor ini untuk gudang ${reqData.Warehouse_Code}` });
   if(reqData.Status === "Pending") return createJsonResponse({ status: 'error', message: 'Ditolak: Request ini belum di-Approve.' });
   if(reqData.Status === "Checked-In") return createJsonResponse({ status: 'error', message: 'Ditolak: Visitor sudah Check-In.' });
   
-  // Validasi Range Tanggal
+  // 3. Validasi Range Tanggal Kunjungan
   let today = new Date(); today.setHours(0,0,0,0);
   let startObj = new Date(reqData.Start_Date); startObj.setHours(0,0,0,0);
   let endObj = new Date(reqData.End_Date); endObj.setHours(0,0,0,0);
@@ -271,6 +287,28 @@ function handleScanQR(payload) {
   
   reqData.Masa_Berlaku = (startObj.getTime() === endObj.getTime()) ? Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy") : `${Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy")} s/d ${Utilities.formatDate(endObj, "GMT+7", "dd MMM yyyy")}`;
   
+  // ======================================================================
+  // 4. LOGIKA BARU: BACA KATEGORI (CHECK / NOT CHECK) DARI MASTER_OPTION
+  // ======================================================================
+  let optData = ss.getSheetByName("Master_Option").getDataRange().getValues();
+  let securityAction = "Check"; // Default (fallback) jika tidak ditemukan atau kosong
+  
+  // Looping mulai baris 2 (index 1)
+  for(let j=1; j<optData.length; j++) {
+    // Jika tipe opsinya "Visitor_Role" dan valuenya (Kolom B) sama dengan Role visitor...
+    if(optData[j][0] === "Visitor_Role" && optData[j][1] === reqData.Visitor_Role) {
+       // ...Maka ambil nilai Kategori-nya dari Kolom C (index 2)
+       // Pastikan hanya mengisi jika di Kolom C ada tulisannya
+       if(optData[j][2]) {
+           securityAction = optData[j][2]; 
+       }
+       break;
+    }
+  }
+  
+  // Sisipkan ke variabel response untuk dibaca Frontend Security App
+  reqData.Security_Action = securityAction; 
+
   return createJsonResponse({ status: 'success', data: reqData });
 }
 
