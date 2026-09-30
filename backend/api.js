@@ -28,6 +28,14 @@ function doPost(e) {
   }
 }
 
+// Fungsi pembantu untuk mencegah karakter aneh merusak Google Chat Card
+function escapeChatText(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function handleVisitorSubmit(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
@@ -40,13 +48,105 @@ function handleVisitorSubmit(payload) {
   startDateObj.setDate(startDateObj.getDate() + (durationDays - 1));
   let endDateStr = Utilities.formatDate(startDateObj, "GMT+7", "yyyy-MM-dd");
 
-  // Format array: A (ReqID) sampai N (Visitor_Role)
   let rowData = [
     requestId, timestamp, payload.Name, payload.Email, payload.ID_Number,
     payload.Category, payload.Department, payload.Company, payload.Start_Date,
     payload.Visit_Purpose, payload.Warehouse_Code, "Pending", endDateStr, ""
   ];
   sheet.appendRow(rowData);
+  
+  // ========================================================
+  // NOTIFIKASI GOOGLE CHAT (MENGADOPSI SCRIPT LAMA)
+  // ========================================================
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const webhookUrl = props.getProperty('GCHAT_WEBHOOK_URL');
+    const dashboardUrl = props.getProperty('DASHBOARD_URL');
+    
+    if (webhookUrl) {
+      // Menggunakan persis struktur cardsV2 dari script lama kamu
+      const chatPayload = {
+        cardsV2: [
+          {
+            cardId: `visitor-approval-${requestId}`,
+            card: {
+              header: {
+                title: 'Visitor Approval Required',
+                subtitle: `${payload.Warehouse_Code} • ${requestId}`
+              },
+              sections: [
+                {
+                  widgets: [
+                    {
+                      decoratedText: {
+                        topLabel: 'Nama Visitor',
+                        text: escapeChatText(payload.Name)
+                      }
+                    },
+                    {
+                      decoratedText: {
+                        topLabel: 'Perusahaan',
+                        text: escapeChatText(payload.Company)
+                      }
+                    },
+                    {
+                      decoratedText: {
+                        topLabel: 'Tujuan Kedatangan',
+                        text: escapeChatText(payload.Visit_Purpose)
+                      }
+                    },
+                    {
+                      decoratedText: {
+                        topLabel: 'Jadwal Kedatangan',
+                        text: `${payload.Start_Date} s/d ${endDateStr} (${payload.Visit_Duration || 1} Hari)`
+                      }
+                    },
+                    {
+                      decoratedText: {
+                        topLabel: 'Warehouse',
+                        text: escapeChatText(payload.Warehouse_Code)
+                      }
+                    },
+                    {
+                      decoratedText: {
+                        topLabel: 'Email Visitor',
+                        text: escapeChatText(payload.Email)
+                      }
+                    },
+                    {
+                      buttonList: {
+                        buttons: [
+                          {
+                            text: 'Review di Dashboard',
+                            onClick: {
+                              openLink: {
+                                url: dashboardUrl || 'https://google.com'
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      };
+
+      // Konfigurasi fetch persis seperti script lama agar tidak ditolak GChat
+      UrlFetchApp.fetch(webhookUrl, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(chatPayload),
+        muteHttpExceptions: true
+      });
+    }
+  } catch (e) {
+    console.log("Notifikasi GChat gagal terkirim:", e);
+  }
+  
   return createJsonResponse({ status: 'success', message: 'Visitor request submitted successfully', data: { request_id: requestId, end_date: endDateStr } });
 }
 
@@ -65,7 +165,9 @@ function handleRequestOtp(payload) {
   let otp = Math.floor(100000 + Math.random() * 900000).toString();
   let otpSheet = ss.getSheetByName("Auth_OTP");
   otpSheet.appendRow([email, otp, new Date(new Date().getTime() + 10 * 60000), "Active"]);
-  GmailApp.sendEmail(email, "[VWMS] OTP Login Manager", "Kode OTP Anda: " + otp);
+  GmailApp.sendEmail(email, "[VWMS] OTP Login Manager", "Kode OTP Anda: " + otp, {
+    name: "VWMS System Admin"
+} );
   return createJsonResponse({ status: 'success', message: 'OTP terkirim ke email' });
 }
 
@@ -94,18 +196,26 @@ function handleApproveRequest(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
   let data = sheet.getDataRange().getValues();
-  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", startDate = "", endDate = "";
+  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", startDate = "", endDate = "", currentStatus = "";
   
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) { 
-        rowIndex = i + 1; visitorName = data[i][2]; visitorEmail = data[i][3]; 
+        rowIndex = i + 1; 
+        visitorName = data[i][2]; 
+        visitorEmail = data[i][3]; 
         whCode = data[i][10]; 
+        currentStatus = data[i][11]; // Kolom L (Status)
         startDate = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
         endDate = Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy");
         break; 
     }
   }
   if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
+  
+  // PENGAMAN: Jika status sudah bukan Pending, tolak proses ganda!
+  if(currentStatus !== "Pending") {
+    return createJsonResponse({ status: 'error', message: 'Request ini sudah diproses sebelumnya dengan status: ' + currentStatus });
+  }
   
   sheet.getRange(rowIndex, 12).setValue("Approved"); // Col L
   sheet.getRange(rowIndex, 14).setValue(visitorRole); // Col N (Visitor Role)
@@ -132,7 +242,29 @@ function handleApproveRequest(payload) {
         <p>Terima kasih atas kepercayaan dan dukungan Anda.<br>Kami menantikan kunjungan Anda!</p>
     </div>`;
   
-  GmailApp.sendEmail(visitorEmail, "Barcode Visitor Warehouse Shipper - " + reqId, "Mode HTML diperlukan.", {htmlBody: htmlBody});
+  GmailApp.sendEmail(visitorEmail, "Barcode Visitor Warehouse Shipper - " + reqId, "Mode HTML diperlukan.", {
+      htmlBody: htmlBody,
+      name: "Management Warehouse Shipper"
+  });
+
+  // ==========================================
+  // NOTIFIKASI GCHAT: APPROVED
+  // ==========================================
+  try {
+    const webhookUrl = PropertiesService.getScriptProperties().getProperty('GCHAT_WEBHOOK_URL');
+    if (webhookUrl) {
+      const chatPayload = {
+        text: `✅ *APPROVED*\nVisitor *${visitorName}* (${reqId}) telah disetujui untuk masuk ke ${whCode}.\nKategori Akses: ${visitorRole}`
+      };
+      UrlFetchApp.fetch(webhookUrl, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(chatPayload),
+        muteHttpExceptions: true
+      });
+    }
+  } catch (e) { console.log(e); }
+
   return createJsonResponse({ status: 'success', message: 'Approved! Email & Barcode telah dikirim.' });
 }
 
@@ -141,13 +273,22 @@ function handleGetAllRequests(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let accData = ss.getSheetByName("Master_Account").getDataRange().getValues();
   let role = "";
-  for (let i = 1; i < accData.length; i++) { if (accData[i][0] === email) { role = accData[i][2]; break; } }
+  
+  for (let i = 1; i < accData.length; i++) { 
+    if (accData[i][0] === email) { 
+      role = accData[i][2]; 
+      break; 
+    } 
+  }
   if (!role) return createJsonResponse({ status: 'error', message: 'Akses ditolak' });
 
+  // JIKA ROLE ADALAH MANAGER_ALL, LANGSUNG BERIKAN AKSES KE SEMUA 160 GUDANG TANPA CEK TABEL LAIN!
   let allowedWH = [];
   if (role === "Manager") {
     let whData = ss.getSheetByName("Account_Warehouse").getDataRange().getValues();
-    for (let i = 1; i < whData.length; i++) { if (whData[i][0] === email) allowedWH.push(whData[i][1]); }
+    for (let i = 1; i < whData.length; i++) { 
+      if (whData[i][0] === email) allowedWH.push(whData[i][1]); 
+    }
   }
 
   let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
@@ -155,11 +296,12 @@ function handleGetAllRequests(payload) {
   
   for(let i=1; i<data.length; i++) {
     let whCode = data[i][10], status = data[i][11];
+    
+    // Logika akses diperbarui: Jika Manager_All, otomatis true untuk semua warehouse
     let hasAccess = (role === "Manager_All") || (role === "Manager" && allowedWH.includes(whCode));
     
     if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In" || status === "Rejected" || status === "Rejected (Auto)")) { 
       
-      // LOGIKA BARU: Gabungkan Start Date dan End Date menjadi format yang rapi
       let tglMulai = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
       let tglSelesai = Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy");
       let visitDateStr = (tglMulai === tglSelesai) ? tglMulai : tglMulai + " s/d " + tglSelesai;
@@ -168,7 +310,7 @@ function handleGetAllRequests(payload) {
         Request_ID: data[i][0], 
         Name: data[i][2], 
         Company: data[i][7],
-        Visit_Date: visitDateStr, // <-- INI YANG DICARI OLEH DASHBOARD.JS
+        Visit_Date: visitDateStr, 
         Warehouse_Code: whCode, 
         Status: status, 
         Visitor_Role: data[i][13]
@@ -183,14 +325,45 @@ function handleRejectRequest(payload) {
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
   let data = sheet.getDataRange().getValues();
+  let rowIndex = -1, currentStatus = "", visitorName = "";
   
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) { 
-      sheet.getRange(i + 1, 12).setValue("Rejected");
-      return createJsonResponse({ status: 'success', message: 'Request ditolak' });
+      rowIndex = i + 1; 
+      currentStatus = data[i][11]; // Kolom L (Status)
+      visitorName = data[i][2];     // Kolom C (Name)
+      break; 
     }
   }
-  return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
+  
+  if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
+  
+  // PENGAMAN: Jika status sudah bukan Pending, tolak proses ganda!
+  if(currentStatus !== "Pending") {
+    return createJsonResponse({ status: 'error', message: 'Request ini sudah diproses sebelumnya dengan status: ' + currentStatus });
+  }
+  
+  sheet.getRange(rowIndex, 12).setValue("Rejected");
+  
+  // ==========================================
+  // NOTIFIKASI GCHAT: REJECTED
+  // ==========================================
+  try {
+    const webhookUrl = PropertiesService.getScriptProperties().getProperty('GCHAT_WEBHOOK_URL');
+    if (webhookUrl) {
+      const chatPayload = {
+        text: `❌ *REJECTED*\nRequest visitor *${visitorName}* (${reqId}) telah ditolak.`
+      };
+      UrlFetchApp.fetch(webhookUrl, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(chatPayload),
+        muteHttpExceptions: true
+      });
+    }
+  } catch (e) { console.log(e); }
+
+  return createJsonResponse({ status: 'success', message: 'Request ditolak' });
 }
 
 function handleGetWarehouses() {

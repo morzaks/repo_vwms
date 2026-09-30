@@ -116,6 +116,7 @@ async function onScanSuccess(decodedText) {
             document.getElementById('vKtp').innerText = result.data.ID_Number;
             document.getElementById('vCompany').innerText = result.data.Company;
             document.getElementById('vPurpose').innerText = result.data.Visit_Purpose;
+            document.getElementById('vSchedule').innerText = result.data.Visit_Date || "-";
 
             currentScannedRequest = result.data.Request_ID;
             document.getElementById('checkInBtn').classList.remove('hidden');

@@ -181,7 +181,9 @@ function renderTable(data) {
 
 // FUNGSI REJECT
 async function rejectRequest(reqId, btnElement) {
+    if (btnElement.disabled) return; // Mencegah klik ganda jika sudah ditekan
     if(!confirm('Yakin ingin me-reject request ini?')) return;
+    
     btnElement.innerText = "Processing...";
     btnElement.disabled = true;
 
@@ -192,7 +194,7 @@ async function rejectRequest(reqId, btnElement) {
     }
 
     try {
-        fetch(API_URL, {
+        await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'reject_request', payload: { Request_ID: reqId } })
         });
@@ -337,8 +339,11 @@ function closeApproveModal() {
     document.getElementById('approveModal').classList.add('hidden');
 }
 
+// MODAL APPROVE (TAGGING ROLE)
 async function submitApproveWithRole() {
     const btn = document.getElementById('confirmApproveBtn');
+    if (btn.disabled) return; // Mencegah klik ganda jika sudah ditekan
+
     const roleEl = document.getElementById('visitor_role');
     const role = roleEl ? roleEl.value : "";
     
