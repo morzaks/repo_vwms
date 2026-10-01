@@ -115,6 +115,7 @@ async function onScanSuccess(decodedText) {
             document.getElementById('vName').innerText = result.data.Name;
             document.getElementById('vKtp').innerText = result.data.ID_Number;
             document.getElementById('vCompany').innerText = result.data.Company;
+            document.getElementById('vPicShipper').innerText = result.data.PIC_Shipper || "-";
             document.getElementById('vPurpose').innerText = result.data.Visit_Purpose;
             document.getElementById('vSchedule').innerText = result.data.Visit_Date || "-";
 

@@ -12,7 +12,7 @@ function doPost(e) {
     else if (action === "approve_request") return handleApproveRequest(data.payload);
     else if (action === "reject_request") return handleRejectRequest(data.payload);
     else if (action === "get_warehouses") return handleGetWarehouses();
-    else if (action === "get_options") return handleGetOptions(); // ROUTING BARU UNTUK DROPDOWN
+    else if (action === "get_options") return handleGetOptions(); 
     
     // ROUTING UNTUK SECURITY APP
     else if (action === "security_login") return handleSecurityLogin(data.payload);
@@ -51,12 +51,13 @@ function handleVisitorSubmit(payload) {
   let rowData = [
     requestId, timestamp, payload.Name, payload.Email, payload.ID_Number,
     payload.Category, payload.Department, payload.Company, payload.Start_Date,
-    payload.Visit_Purpose, payload.Warehouse_Code, "Pending", endDateStr, ""
+    payload.Visit_Purpose, payload.Warehouse_Code, "Pending", endDateStr, "",
+    payload.PIC_Shipper || "-" // KOLOM O (Indeks 14): PIC Shipper
   ];
   sheet.appendRow(rowData);
   
   // ========================================================
-  // NOTIFIKASI GOOGLE CHAT (MENGADOPSI SCRIPT LAMA)
+  // NOTIFIKASI GOOGLE CHAT (DITAMBAH PIC SHIPPER)
   // ========================================================
   try {
     const props = PropertiesService.getScriptProperties();
@@ -64,7 +65,6 @@ function handleVisitorSubmit(payload) {
     const dashboardUrl = props.getProperty('DASHBOARD_URL');
     
     if (webhookUrl) {
-      // Menggunakan persis struktur cardsV2 dari script lama kamu
       const chatPayload = {
         cardsV2: [
           {
@@ -87,6 +87,12 @@ function handleVisitorSubmit(payload) {
                       decoratedText: {
                         topLabel: 'Perusahaan',
                         text: escapeChatText(payload.Company)
+                      }
+                    },
+                    {
+                      decoratedText: {
+                        topLabel: 'PIC Shipper',
+                        text: escapeChatText(payload.PIC_Shipper || '-')
                       }
                     },
                     {
@@ -135,7 +141,6 @@ function handleVisitorSubmit(payload) {
         ]
       };
 
-      // Konfigurasi fetch persis seperti script lama agar tidak ditolak GChat
       UrlFetchApp.fetch(webhookUrl, {
         method: 'post',
         contentType: 'application/json',
@@ -191,12 +196,13 @@ function handleVerifyOtp(payload) {
 
 function handleApproveRequest(payload) {
   let reqId = payload.Request_ID;
-  let visitorRole = payload.Visitor_Role || "Eksternal non Client - Perlu Cek"; // Default fallback
+  let visitorRole = payload.Visitor_Role || "Eksternal non Client - Perlu Cek"; 
+  let managerEmail = payload.Manager_Email || "Sistem / Unknown"; 
   
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName("Visitor_Request");
   let data = sheet.getDataRange().getValues();
-  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", startDate = "", endDate = "", currentStatus = "";
+  let rowIndex = -1, visitorEmail = "", visitorName = "", whCode = "", startDate = "", endDate = "", currentStatus = "", picShipper = "";
   
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) { 
@@ -204,21 +210,21 @@ function handleApproveRequest(payload) {
         visitorName = data[i][2]; 
         visitorEmail = data[i][3]; 
         whCode = data[i][10]; 
-        currentStatus = data[i][11]; // Kolom L (Status)
+        currentStatus = data[i][11]; 
         startDate = Utilities.formatDate(new Date(data[i][8]), "GMT+7", "dd MMM yyyy");
         endDate = Utilities.formatDate(new Date(data[i][12]), "GMT+7", "dd MMM yyyy");
+        picShipper = data[i][14] || "-"; // Tangkap PIC Shipper
         break; 
     }
   }
   if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
   
-  // PENGAMAN: Jika status sudah bukan Pending, tolak proses ganda!
   if(currentStatus !== "Pending") {
     return createJsonResponse({ status: 'error', message: 'Request ini sudah diproses sebelumnya dengan status: ' + currentStatus });
   }
   
-  sheet.getRange(rowIndex, 12).setValue("Approved"); // Col L
-  sheet.getRange(rowIndex, 14).setValue(visitorRole); // Col N (Visitor Role)
+  sheet.getRange(rowIndex, 12).setValue("Approved"); 
+  sheet.getRange(rowIndex, 14).setValue(visitorRole); 
   
   let qrUrl = "https://quickchart.io/qr?text=" + reqId + "&size=300";
   let masaBerlaku = startDate === endDate ? startDate : `${startDate} s/d ${endDate}`;
@@ -247,14 +253,11 @@ function handleApproveRequest(payload) {
       name: "Management Warehouse Shipper"
   });
 
-  // ==========================================
-  // NOTIFIKASI GCHAT: APPROVED
-  // ==========================================
   try {
     const webhookUrl = PropertiesService.getScriptProperties().getProperty('GCHAT_WEBHOOK_URL');
     if (webhookUrl) {
       const chatPayload = {
-        text: `✅ *APPROVED*\nVisitor *${visitorName}* (${reqId}) telah disetujui untuk masuk ke ${whCode}.\nKategori Akses: ${visitorRole}`
+        text: `✅ *APPROVED*\nVisitor *${visitorName}* (${reqId}) telah disetujui untuk masuk ke ${whCode}.\nKategori Akses: ${visitorRole}\n👤 *PIC Shipper:* ${picShipper}\n👨‍💻 *Approved by:* ${managerEmail}`
       };
       UrlFetchApp.fetch(webhookUrl, {
         method: 'post',
@@ -282,7 +285,6 @@ function handleGetAllRequests(payload) {
   }
   if (!role) return createJsonResponse({ status: 'error', message: 'Akses ditolak' });
 
-  // JIKA ROLE ADALAH MANAGER_ALL, LANGSUNG BERIKAN AKSES KE SEMUA 160 GUDANG TANPA CEK TABEL LAIN!
   let allowedWH = [];
   if (role === "Manager") {
     let whData = ss.getSheetByName("Account_Warehouse").getDataRange().getValues();
@@ -297,7 +299,6 @@ function handleGetAllRequests(payload) {
   for(let i=1; i<data.length; i++) {
     let whCode = data[i][10], status = data[i][11];
     
-    // Logika akses diperbarui: Jika Manager_All, otomatis true untuk semua warehouse
     let hasAccess = (role === "Manager_All") || (role === "Manager" && allowedWH.includes(whCode));
     
     if(hasAccess && (status === "Pending" || status === "Approved" || status === "Checked-In" || status === "Rejected" || status === "Rejected (Auto)")) { 
@@ -313,7 +314,8 @@ function handleGetAllRequests(payload) {
         Visit_Date: visitDateStr, 
         Warehouse_Code: whCode, 
         Status: status, 
-        Visitor_Role: data[i][13]
+        Visitor_Role: data[i][13],
+        PIC_Shipper: data[i][14] || "-" // Tangkap PIC Shipper ke API Dashboard
       });
     }
   }
@@ -330,24 +332,20 @@ function handleRejectRequest(payload) {
   for(let i=1; i<data.length; i++) {
     if(data[i][0] === reqId) { 
       rowIndex = i + 1; 
-      currentStatus = data[i][11]; // Kolom L (Status)
-      visitorName = data[i][2];     // Kolom C (Name)
+      currentStatus = data[i][11]; 
+      visitorName = data[i][2];     
       break; 
     }
   }
   
   if(rowIndex === -1) return createJsonResponse({ status: 'error', message: 'Request tidak ditemukan' });
   
-  // PENGAMAN: Jika status sudah bukan Pending, tolak proses ganda!
   if(currentStatus !== "Pending") {
     return createJsonResponse({ status: 'error', message: 'Request ini sudah diproses sebelumnya dengan status: ' + currentStatus });
   }
   
   sheet.getRange(rowIndex, 12).setValue("Rejected");
   
-  // ==========================================
-  // NOTIFIKASI GCHAT: REJECTED
-  // ==========================================
   try {
     const webhookUrl = PropertiesService.getScriptProperties().getProperty('GCHAT_WEBHOOK_URL');
     if (webhookUrl) {
@@ -380,12 +378,10 @@ function handleGetOptions() {
   
   let options = [];
   
-  // Looping mulai dari baris ke-2 (index 1) untuk melewati Header
   for (let i = 1; i < data.length; i++) { 
-    let optionType = data[i][0]; // Kolom A
-    let optionValue = data[i][1]; // Kolom B
+    let optionType = data[i][0]; 
+    let optionValue = data[i][1]; 
     
-    // Tarik hanya jika Option_Type adalah "Visitor_Role"
     if(optionType === "Visitor_Role" && optionValue !== "") {
       options.push(optionValue);
     }
@@ -418,14 +414,10 @@ function handleSecurityLogin(payload) {
   return createJsonResponse({ status: 'success', data: { username: username, warehouse_code: whCode } });
 }
 
-// ==========================================
-// FUNGSI SCAN QR (UPDATE: LOGIKA MASTER OPTION CHECK/NOT CHECK)
-// ==========================================
 function handleScanQR(payload) {
   let reqId = payload.Request_ID, secWh = payload.Warehouse_Code;
   let ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
-  // 1. Ambil data Visitor Request
   let data = ss.getSheetByName("Visitor_Request").getDataRange().getValues();
   let reqData = null;
   
@@ -434,19 +426,18 @@ function handleScanQR(payload) {
         reqData = { 
             Request_ID: data[i][0], Name: data[i][2], ID_Number: data[i][4], 
             Company: data[i][7], Start_Date: data[i][8], Visit_Purpose: data[i][9], 
-            Warehouse_Code: data[i][10], Status: data[i][11], End_Date: data[i][12], Visitor_Role: data[i][13]
+            Warehouse_Code: data[i][10], Status: data[i][11], End_Date: data[i][12], Visitor_Role: data[i][13],
+            PIC_Shipper: data[i][14] || "-" // Tangkap PIC Shipper
         };
       break;
     }
   }
   if(!reqData) return createJsonResponse({ status: 'error', message: 'Barcode tidak valid / Request tidak ditemukan' });
   
-  // 2. Validasi Lokasi & Status
   if(reqData.Warehouse_Code !== secWh) return createJsonResponse({ status: 'error', message: `Salah lokasi! Visitor ini untuk gudang ${reqData.Warehouse_Code}` });
   if(reqData.Status === "Pending") return createJsonResponse({ status: 'error', message: 'Ditolak: Request ini belum di-Approve.' });
   if(reqData.Status === "Checked-In") return createJsonResponse({ status: 'error', message: 'Ditolak: Visitor sudah Check-In.' });
   
-  // 3. Validasi Range Tanggal Kunjungan
   let today = new Date(); today.setHours(0,0,0,0);
   let startObj = new Date(reqData.Start_Date); startObj.setHours(0,0,0,0);
   let endObj = new Date(reqData.End_Date); endObj.setHours(0,0,0,0);
@@ -460,18 +451,11 @@ function handleScanQR(payload) {
   
   reqData.Masa_Berlaku = (startObj.getTime() === endObj.getTime()) ? Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy") : `${Utilities.formatDate(startObj, "GMT+7", "dd MMM yyyy")} s/d ${Utilities.formatDate(endObj, "GMT+7", "dd MMM yyyy")}`;
   
-  // ======================================================================
-  // 4. LOGIKA BARU: BACA KATEGORI (CHECK / NOT CHECK) DARI MASTER_OPTION
-  // ======================================================================
   let optData = ss.getSheetByName("Master_Option").getDataRange().getValues();
-  let securityAction = "Check"; // Default (fallback) jika tidak ditemukan atau kosong
+  let securityAction = "Check"; 
   
-  // Looping mulai baris 2 (index 1)
   for(let j=1; j<optData.length; j++) {
-    // Jika tipe opsinya "Visitor_Role" dan valuenya (Kolom B) sama dengan Role visitor...
     if(optData[j][0] === "Visitor_Role" && optData[j][1] === reqData.Visitor_Role) {
-       // ...Maka ambil nilai Kategori-nya dari Kolom C (index 2)
-       // Pastikan hanya mengisi jika di Kolom C ada tulisannya
        if(optData[j][2]) {
            securityAction = optData[j][2]; 
        }
@@ -479,7 +463,6 @@ function handleScanQR(payload) {
     }
   }
   
-  // Sisipkan ke variabel response untuk dibaca Frontend Security App
   reqData.Security_Action = securityAction; 
 
   return createJsonResponse({ status: 'success', data: reqData });
@@ -518,12 +501,10 @@ function handleGetExpectedVisitors(payload) {
     let reqWh = data[i][10];
     let status = data[i][11];
     
-    // Cek apakah data ini valid (punya start & end date)
     if(data[i][8] && data[i][12]) {
         let startObj = new Date(data[i][8]); startObj.setHours(0,0,0,0);
         let endObj = new Date(data[i][12]); endObj.setHours(0,0,0,0);
 
-        // Jika Gudang cocok, Status Approved, dan HARI INI berada di antara Start dan End
         if(reqWh === secWh && status === "Approved" && today >= startObj && today <= endObj) {
           expectedList.push({ Request_ID: data[i][0], Name: data[i][2], Company: data[i][7] });
         }
@@ -545,7 +526,6 @@ function autoRejectExpiredRequests() {
         let endDate = new Date(data[i][12]);
         endDate.setHours(0, 0, 0, 0);
 
-        // Expired jika End_Date sudah lewat
         if (status === "Pending" && endDate < today) {
           sheet.getRange(i + 1, 12).setValue("Rejected (Auto)");
         }

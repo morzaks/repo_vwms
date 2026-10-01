@@ -21,11 +21,11 @@
             <!-- Nama & Email -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap <span class="text-red-500">*</span></label>
                     <input type="text" id="Name" required pattern="[a-zA-Z\s]+" title="Hanya huruf yang diperbolehkan" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Email (Untuk Barcode)</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Email (Untuk Barcode) <span class="text-red-500">*</span></label>
                     <input type="email" id="Email" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
             </div>
@@ -33,11 +33,11 @@
             <!-- ID & Kategori -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">No. Identitas (KTP/SIM/NPWP)</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">No. Identitas (KTP/SIM/NPWP) <span class="text-red-500">*</span></label>
                     <input type="text" id="ID_Number" required pattern="[0-9]+" title="Hanya angka, tanpa titik atau spasi" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Kategori Visitor</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kategori Visitor <span class="text-red-500">*</span></label>
                     <select id="Category" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                         <option value="">Pilih Kategori...</option>
                         <option value="Internal">Internal (Shipper)</option>
@@ -49,29 +49,35 @@
             <!-- Departemen & Perusahaan -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div id="deptContainer" class="hidden">
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Departemen</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Departemen <span class="text-red-500">*</span></label>
                     <input type="text" id="Department" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Perusahaan</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Perusahaan <span class="text-red-500">*</span></label>
                     <input type="text" id="Company" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
+            </div>
+            
+            <!-- PIC Shipper (Hanya Muncul jika External) -->
+            <div id="picShipperContainer" class="hidden">
+                <label class="block text-sm font-medium text-slate-700 mb-1">PIC Shipper <span class="text-red-500">*</span></label>
+                <input type="text" id="PIC_Shipper" placeholder="Nama PIC Shipper internal yang ditemui" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
             </div>
 
             <!-- Jadwal & Warehouse -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div class="flex gap-3">
                     <div class="w-1/2">
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Tgl Mulai</label>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tgl Mulai <span class="text-red-500">*</span></label>
                         <input type="date" id="start_date" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div class="w-1/2">
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Durasi (Hari)</label>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Durasi (Hari) <span class="text-red-500">*</span></label>
                         <input type="number" id="visit_duration" min="1" placeholder="Misal: 1" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Lokasi Gudang</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Lokasi Gudang <span class="text-red-500">*</span></label>
                     <select id="Warehouse_Code" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                         <option value="">Memuat daftar gudang...</option>
                     </select>
@@ -80,7 +86,7 @@
 
             <!-- Tujuan -->
             <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Tujuan Kedatangan</label>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Tujuan Kedatangan <span class="text-red-500">*</span></label>
                 <textarea id="Visit_Purpose" required rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
             </div>
 
@@ -88,7 +94,6 @@
             <button type="submit" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200">
                 Submit Request
             </button>
-            
         </form>
         <!-- Modal Sukses -->
         <div id="successModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">

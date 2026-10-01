@@ -158,13 +158,18 @@ function renderTable(data) {
                     </div>`;
             }
 
-            // Cegah error tampilan jika tanggal bernilai "undefined"
             let tanggalTampil = (req.Visit_Date && req.Visit_Date !== "undefined") ? req.Visit_Date : "-";
+            
+            // Logika tampilan PIC Shipper
+            let picTampil = (req.PIC_Shipper && req.PIC_Shipper !== "-") ? req.PIC_Shipper : "-";
 
             tr.innerHTML = `
                 <td class="p-4 text-sm font-medium text-slate-700">${req.Request_ID}</td>
                 <td class="p-4 text-sm text-slate-600">${req.Name}</td>
-                <td class="p-4 text-sm text-slate-600">${req.Company}</td>
+                <td class="p-4 text-sm text-slate-600">
+                    <div class="font-semibold text-slate-800">${req.Company}</div>
+                    <div class="text-xs text-blue-600 font-medium mt-0.5">PIC: ${picTampil}</div>
+                </td>
                 <td class="p-4 text-sm text-slate-600">${tanggalTampil}</td>
                 <td class="p-4 text-sm text-slate-600">
                     <span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">${req.Warehouse_Code}</span>
@@ -228,14 +233,17 @@ function exportToCSV() {
         return;
     }
 
-    let csvContent = "Request_ID,Nama,Perusahaan,Jadwal_Kunjungan,Gudang,Status\n";
+    // Tambahkan header PIC_Shipper
+    let csvContent = "Request_ID,Nama,Perusahaan,PIC_Shipper,Jadwal_Kunjungan,Gudang,Status\n";
 
     currentFilteredData.forEach(req => {
         let name = `"${req.Name}"`;
         let company = `"${req.Company}"`;
+        let picShipper = `"${req.PIC_Shipper || '-'}"`;
         let tanggalTampil = (req.Visit_Date && req.Visit_Date !== "undefined") ? req.Visit_Date : "-";
         
-        csvContent += `${req.Request_ID},${name},${company},${tanggalTampil},${req.Warehouse_Code},${req.Status}\n`;
+        // Masukkan data picShipper ke baris CSV
+        csvContent += `${req.Request_ID},${name},${company},${picShipper},${tanggalTampil},${req.Warehouse_Code},${req.Status}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -376,4 +384,25 @@ async function submitApproveWithRole() {
         btn.innerText = "Confirm Approve";
         btn.disabled = false;
     }
+}
+
+// ==========================================
+// FUNGSI MANUAL REFRESH
+// ==========================================
+async function manualRefresh() {
+    const btn = document.getElementById('refreshBtn');
+    const originalHtml = btn.innerHTML; 
+    
+    // Ubah status tombol menjadi loading
+    btn.innerHTML = 'Refreshing...';
+    btn.disabled = true;
+    btn.classList.add('opacity-70', 'cursor-not-allowed');
+
+    // Tarik ulang data dari server
+    await fetchRequestsData(); 
+
+    // Kembalikan tombol ke keadaan semula setelah data berhasil ditarik
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
+    btn.classList.remove('opacity-70', 'cursor-not-allowed');
 }
