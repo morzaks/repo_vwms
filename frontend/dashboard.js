@@ -149,6 +149,9 @@ function renderTable(data) {
             } else if (req.Status === 'Rejected' || req.Status === 'Rejected (Auto)') {
                 statusBadge = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Rejected</span>';
                 actionBtn = `<button disabled class="bg-slate-200 text-slate-400 text-sm font-semibold py-1.5 px-3 rounded cursor-not-allowed">Ditolak</button>`;
+            } else if (req.Status === 'Processing') {
+                statusBadge = '<span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold animate-pulse">Syncing...</span>';
+                actionBtn = `<button disabled class="bg-slate-300 text-slate-500 text-sm font-semibold py-1.5 px-4 rounded cursor-not-allowed animate-pulse">Processing...</button>`;
             } else { 
                 statusBadge = '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Pending</span>';
                 actionBtn = `
@@ -159,8 +162,6 @@ function renderTable(data) {
             }
 
             let tanggalTampil = (req.Visit_Date && req.Visit_Date !== "undefined") ? req.Visit_Date : "-";
-            
-            // Logika tampilan PIC Shipper
             let picTampil = (req.PIC_Shipper && req.PIC_Shipper !== "-") ? req.PIC_Shipper : "-";
 
             tr.innerHTML = `
@@ -186,25 +187,49 @@ function renderTable(data) {
 
 // FUNGSI REJECT
 async function rejectRequest(reqId, btnElement) {
-    if (btnElement.disabled) return; // Mencegah klik ganda jika sudah ditekan
-    if(!confirm('Yakin ingin me-reject request ini?')) return;
-    
-    btnElement.innerText = "Processing...";
+    const originalText = btnElement.innerHTML;
+    btnElement.innerHTML = '⏳...';
     btnElement.disabled = true;
+    btnElement.classList.add('opacity-70', 'cursor-not-allowed');
+    
+    const approveBtn = btnElement.previousElementSibling;
+    if(approveBtn) approveBtn.disabled = true;
 
-    let reqIndex = globalData.findIndex(r => r.Request_ID === reqId);
-    if(reqIndex !== -1) {
-        globalData[reqIndex].Status = 'Rejected';
-        applyFilter(); 
+    if (!confirm('Yakin ingin menolak request ini?')) {
+        btnElement.innerHTML = originalText;
+        btnElement.disabled = false;
+        btnElement.classList.remove('opacity-70', 'cursor-not-allowed');
+        if(approveBtn) approveBtn.disabled = false;
+        return;
     }
 
     try {
-        await fetch(API_URL, {
+        const response = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'reject_request', payload: { Request_ID: reqId } })
+            body: JSON.stringify({
+                action: 'reject_request',
+                payload: { Request_ID: reqId }
+            })
         });
-    } catch(err) {
-        console.log("Proses background berjalan...");
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            updateRowVisually(reqId, 'Processing');
+            
+            setTimeout(() => {
+                fetchRequestsData();
+            }, 3000);
+        } else {
+            alert(result.message);
+            btnElement.innerHTML = originalText;
+            btnElement.disabled = false;
+            if(approveBtn) approveBtn.disabled = false;
+        }
+    } catch (error) {
+        alert('Gagal menghubungi server.');
+        btnElement.innerHTML = originalText;
+        btnElement.disabled = false;
+        if(approveBtn) approveBtn.disabled = false;
     }
 }
 
@@ -217,14 +242,11 @@ function logout() {
 // INISIALISASI AWAL (SAAT HALAMAN DIBUKA)
 // ==========================================
 async function initDashboard() {
-    // 1. Tarik data tabel utama dulu (Prioritas UI)
     await fetchRequestsData(); 
-    
-    // 2. Setelah tabel beres, baru diam-diam tarik data role untuk modal
     await loadVisitorRoles();  
 }
 
-initDashboard(); // Jalankan antrian
+initDashboard(); 
 
 // EXPORT TO CSV
 function exportToCSV() {
@@ -233,7 +255,6 @@ function exportToCSV() {
         return;
     }
 
-    // Tambahkan header PIC_Shipper
     let csvContent = "Request_ID,Nama,Perusahaan,PIC_Shipper,Jadwal_Kunjungan,Gudang,Status\n";
 
     currentFilteredData.forEach(req => {
@@ -242,7 +263,6 @@ function exportToCSV() {
         let picShipper = `"${req.PIC_Shipper || '-'}"`;
         let tanggalTampil = (req.Visit_Date && req.Visit_Date !== "undefined") ? req.Visit_Date : "-";
         
-        // Masukkan data picShipper ke baris CSV
         csvContent += `${req.Request_ID},${name},${company},${picShipper},${tanggalTampil},${req.Warehouse_Code},${req.Status}\n`;
     });
 
@@ -332,11 +352,13 @@ async function submitNewAccount(e) {
     }
 }
 
+// ==========================================
 // MODAL APPROVE (TAGGING ROLE)
+// ==========================================
 let selectedRequestId = "";
 
 function openApproveModal(reqId) {
-    selectedRequestId = reqId;
+    selectedRequestId = reqId; // ID diset di sini saat manager membuka modal
     if(document.getElementById('visitor_role')) {
         document.getElementById('visitor_role').value = ""; 
     }
@@ -347,42 +369,48 @@ function closeApproveModal() {
     document.getElementById('approveModal').classList.add('hidden');
 }
 
-// MODAL APPROVE (TAGGING ROLE)
 async function submitApproveWithRole() {
-    const btn = document.getElementById('confirmApproveBtn');
-    if (btn.disabled) return; // Mencegah klik ganda jika sudah ditekan
-
-    const roleEl = document.getElementById('visitor_role');
-    const role = roleEl ? roleEl.value : "";
+    // Cek ID elemen HTML kamu, kalau namanya visitor_role, ambil nilainya dari sana
+    const roleElem = document.getElementById('visitor_role') || document.getElementById('visitorRoleSelect');
+    const role = roleElem ? roleElem.value : "";
+    const btn = document.getElementById('confirmApproveBtn'); 
     
-    btn.innerText = "Memproses...";
+    btn.innerHTML = 'Memproses...';
     btn.disabled = true;
-
-    let reqIndex = globalData.findIndex(r => r.Request_ID === selectedRequestId);
-    if(reqIndex !== -1) {
-        globalData[reqIndex].Status = 'Approved';
-        applyFilter(); 
-    }
-
-    closeApproveModal();
+    btn.classList.add('opacity-70', 'cursor-not-allowed');
 
     try {
-        await fetch(API_URL, {
+        const response = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ 
-                action: 'approve_request', 
+            body: JSON.stringify({
+                action: 'approve_request',
                 payload: { 
-                    Request_ID: selectedRequestId, 
+                    Request_ID: selectedRequestId, // DIPERBAIKI: Menggunakan variabel ID yang valid
                     Visitor_Role: role,
                     Manager_Email: localStorage.getItem('manager_email') 
-                } 
+                }
             })
         });
-    } catch(err) {
-        console.log("Proses background berjalan...");
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            closeApproveModal();
+            
+            updateRowVisually(selectedRequestId, 'Processing'); // DIPERBAIKI
+            
+            setTimeout(() => {
+                fetchRequestsData();
+            }, 3000);
+            
+        } else {
+            alert(result.message);
+        }
+    } catch (error) {
+        alert('Gagal menghubungi server.');
     } finally {
-        btn.innerText = "Confirm Approve";
+        btn.innerHTML = 'Approve Request';
         btn.disabled = false;
+        btn.classList.remove('opacity-70', 'cursor-not-allowed');
     }
 }
 
@@ -393,16 +421,27 @@ async function manualRefresh() {
     const btn = document.getElementById('refreshBtn');
     const originalHtml = btn.innerHTML; 
     
-    // Ubah status tombol menjadi loading
     btn.innerHTML = 'Refreshing...';
     btn.disabled = true;
     btn.classList.add('opacity-70', 'cursor-not-allowed');
 
-    // Tarik ulang data dari server
     await fetchRequestsData(); 
 
-    // Kembalikan tombol ke keadaan semula setelah data berhasil ditarik
     btn.innerHTML = originalHtml;
     btn.disabled = false;
     btn.classList.remove('opacity-70', 'cursor-not-allowed');
+}
+
+// ==========================================
+// FUNGSI UPDATE BARIS INSTAN (OPTIMISTIC UI)
+// ==========================================
+function updateRowVisually(reqId, newStatus) {
+    // DIPERBAIKI: Menggunakan globalData dan applyFilter() sesuai deklarasi kamu
+    const rowIndex = globalData.findIndex(r => r.Request_ID === reqId);
+    
+    if (rowIndex !== -1) {
+        globalData[rowIndex].Status = newStatus; 
+    }
+    
+    applyFilter();
 }
