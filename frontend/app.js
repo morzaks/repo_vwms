@@ -16,32 +16,18 @@ categorySelect.addEventListener('change', function() {
         companyInput.value = 'Shipper';
         companyInput.setAttribute('readonly', 'true');
         companyInput.classList.add('bg-gray-100');
-        
-        // Sembunyikan PIC Shipper
-        picShipperContainer.classList.add('hidden');
-        picShipperInput.removeAttribute('required');
-        picShipperInput.value = '';
     } else if (this.value === 'External') {
         deptContainer.classList.add('hidden');
         departmentInput.removeAttribute('required');
         departmentInput.value = '';
         companyInput.value = '';
         companyInput.removeAttribute('readonly');
-        companyInput.classList.remove('bg-gray-100');
-        
-        // Munculkan PIC Shipper
-        picShipperContainer.classList.remove('hidden');
-        picShipperInput.setAttribute('required', 'true');
     } else {
         deptContainer.classList.add('hidden');
         departmentInput.removeAttribute('required');
         departmentInput.value = '';
         companyInput.removeAttribute('readonly');
         companyInput.classList.remove('bg-gray-100');
-        
-        picShipperContainer.classList.add('hidden');
-        picShipperInput.removeAttribute('required');
-        picShipperInput.value = '';
     }
 });
 
@@ -58,6 +44,7 @@ form.addEventListener('submit', async function(e) {
         Category: categorySelect.value,
         Department: departmentInput.value || '-', 
         Company: companyInput.value,
+        PIC_Shipper: document.getElementById('PIC_Shipper').value,
         Visit_Purpose: document.getElementById('Visit_Purpose').value,
         Start_Date: document.getElementById("start_date").value,
         Visit_Duration: document.getElementById("visit_duration").value,
